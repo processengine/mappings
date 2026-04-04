@@ -31,6 +31,7 @@ output
 `@processengine/mappings` sits between raw input and business logic. It handles structural preparation and value normalization — nothing more.
 
 **What it does:**
+
 - copy fields from sources into a new structure
 - normalize strings (trim, case, whitespace, digits)
 - canonicalize values via explicit dictionaries
@@ -38,6 +39,7 @@ output
 - chain multiple normalization steps on one value
 
 **What it intentionally does not do:**
+
 - conditional logic (`if`/`else`, branching)
 - arithmetic
 - regular expressions
@@ -60,33 +62,35 @@ Requires Node.js >= 18. No runtime dependencies.
 ## Quick start
 
 ```js
-const { compile } = require('@processengine/mappings');
+const { compile } = require("@processengine/mappings");
 
 const definition = {
-  mappingId: 'client.normalize.v1',
-  sources: { raw: 'object' },
+  mappingId: "client.normalize.v1",
+  sources: { raw: "object" },
   output: {
-    'client.phone':    { removeNonDigits: 'sources.raw.phone'    },
-    'client.email':    { lowercase:       'sources.raw.email'    },
-    'client.name':     { normalizeSpaces: 'sources.raw.fullName' },
-    'client.gender': {
+    "client.phone": { removeNonDigits: "sources.raw.phone" },
+    "client.email": { lowercase: "sources.raw.email" },
+    "client.name": { normalizeSpaces: "sources.raw.fullName" },
+    "client.gender": {
       transform: {
-        from: 'sources.raw.gender',
+        from: "sources.raw.gender",
         steps: [
-          { trim:      true },
+          { trim: true },
           { uppercase: true },
-          { mapValue: {
-              map:      { M: 'MALE', Ж: 'FEMALE', F: 'FEMALE' },
+          {
+            mapValue: {
+              map: { M: "MALE", Ж: "FEMALE", F: "FEMALE" },
               fallback: null,
-          }},
+            },
+          },
         ],
       },
     },
-    'client.currency': {
+    "client.currency": {
       mapValue: {
-        from:     'sources.raw.currencyCode',
-        map:      { RUR: 'RUB', '643': 'RUB', '840': 'USD' },
-        fallback: 'passthrough',
+        from: "sources.raw.currencyCode",
+        map: { RUR: "RUB", 643: "RUB", 840: "USD" },
+        fallback: "passthrough",
       },
     },
   },
@@ -103,11 +107,11 @@ const { mapping } = result; // CompiledMapping — immutable, reusable
 
 const output = mapping.execute({
   raw: {
-    phone:        '+7 (999) 111-22-33',
-    email:        'CUSTOMER@EXAMPLE.COM',
-    fullName:     '  Иван   Иванов  ',
-    gender:       'M',
-    currencyCode: 'RUR',
+    phone: "+7 (999) 111-22-33",
+    email: "CUSTOMER@EXAMPLE.COM",
+    fullName: "  Иван   Иванов  ",
+    gender: "M",
+    currencyCode: "RUR",
   },
 });
 
@@ -130,7 +134,7 @@ console.log(output.result);
 Compile-first separates definition validation (once at startup) from data processing (many times per request):
 
 ```js
-const { compile } = require('@processengine/mappings');
+const { compile } = require("@processengine/mappings");
 
 // Step 1 — compile once
 const result = compile(definition);
@@ -150,7 +154,7 @@ const outWithTrace = mapping.execute(sources, { trace: true });
 For one-off calls and tests, `engine.run()` is available as shorthand (compiles and executes in one call):
 
 ```js
-const { MappingEngine } = require('@processengine/mappings');
+const { MappingEngine } = require("@processengine/mappings");
 const engine = new MappingEngine();
 
 const out = engine.run({ definition, sources });
@@ -162,25 +166,25 @@ const out = engine.run({ definition, sources });
 
 ### Structural mapping
 
-| Operator   | Description                                                                |
-|------------|----------------------------------------------------------------------------|
-| `from`     | Copies a value from a source path (deep copy for objects and arrays)       |
-| `literal`  | Inserts a constant value                                                   |
-| `exists`   | Returns `true` if path resolves to a non-null value                        |
-| `equals`   | Strict (`===`) comparison with a literal → always returns boolean          |
-| `coalesce` | Returns the first non-null value from 1–4 path or literal candidates       |
+| Operator   | Description                                                          |
+| ---------- | -------------------------------------------------------------------- |
+| `from`     | Copies a value from a source path (deep copy for objects and arrays) |
+| `literal`  | Inserts a constant value                                             |
+| `exists`   | Returns `true` if path resolves to a non-null value                  |
+| `equals`   | Strict (`===`) comparison with a literal → always returns boolean    |
+| `coalesce` | Returns the first non-null value from 1–4 path or literal candidates |
 
 **Note on `exists` and `equals`:** these operators compute simple one-value technical flags. Logical compositions (`and`, `or`, `not`) are not supported and will not be added. Business-level facts belong in `@processengine/rules`.
 
 ### String normalization
 
-| Operator          | Description                                                    |
-|-------------------|----------------------------------------------------------------|
-| `trim`            | Removes leading and trailing whitespace                        |
-| `lowercase`       | Converts to lowercase                                          |
-| `uppercase`       | Converts to uppercase                                          |
-| `normalizeSpaces` | Trim + collapse internal whitespace sequences to one space     |
-| `removeNonDigits` | Keeps only `[0-9]` characters                                  |
+| Operator          | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `trim`            | Removes leading and trailing whitespace                    |
+| `lowercase`       | Converts to lowercase                                      |
+| `uppercase`       | Converts to uppercase                                      |
+| `normalizeSpaces` | Trim + collapse internal whitespace sequences to one space |
+| `removeNonDigits` | Keeps only `[0-9]` characters                              |
 
 All string operators: if the value is not a string, is `null`, or the path does not resolve — the output field is **not created** (no implicit type coercion).
 
@@ -203,12 +207,12 @@ Special case: `removeNonDigits` creates `""` if nothing remains after filtering 
 
 `fallback` behavior when the key is not found:
 
-| `fallback`       | Behavior                                |
-|------------------|-----------------------------------------|
-| absent           | Field not created                       |
-| `null`           | Field created with `null`               |
-| `"passthrough"`  | Field created with the original value   |
-| JSON literal     | Field created with that literal         |
+| `fallback`      | Behavior                              |
+| --------------- | ------------------------------------- |
+| absent          | Field not created                     |
+| `null`          | Field created with `null`             |
+| `"passthrough"` | Field created with the original value |
+| JSON literal    | Field created with that literal       |
 
 ### Normalization chain: `transform`
 
@@ -315,30 +319,75 @@ Exit codes: `0` = success, `1` = error.
 
 ## TypeScript
 
+Types are auto-resolved via the `types` field in `package.json`. No extra configuration needed.
+
 ```typescript
-import { compile, MappingEngine, MappingDefinition, MappingResult } from '@processengine/mappings';
+import {
+  compile,
+  type MappingDefinition,
+  type MappingResult,
+} from "@processengine/mappings";
 
 const definition: MappingDefinition = {
-  mappingId: 'client.normalize.v1',
-  sources: { raw: 'object' },
+  mappingId: "client.normalize.v1",
+  sources: { raw: "object" },
   output: {
-    'client.email': { lowercase: 'sources.raw.email' },
+    "client.phone": { removeNonDigits: "sources.raw.phone" },
+    "client.email": { lowercase: "sources.raw.email" },
+    "client.gender": {
+      transform: {
+        from: "sources.raw.gender",
+        steps: [
+          { trim: true },
+          { uppercase: true },
+          { mapValue: { map: { M: "MALE", F: "FEMALE" }, fallback: null } },
+        ],
+      },
+    },
   },
 };
 
-const result = compile(definition);
-if (result.success) {
-  const out: MappingResult = result.mapping.execute({ raw: { email: 'TEST@EXAMPLE.COM' } });
+// compile() returns CompileResult — discriminated union
+const compiled = compile(definition);
+
+if (!compiled.success) {
+  // compiled.error is typed as MappingError with code, message, phase, targetPath...
+  console.error(`[${compiled.error.code}] ${compiled.error.message}`);
+  process.exit(1);
+}
+
+// compiled.mapping is CompiledMapping — immutable, reusable
+const { mapping } = compiled;
+
+// execute() returns MappingResult — discriminated union
+const out: MappingResult = mapping.execute({
+  raw: { phone: "+7 (999) 111-22-33", email: "USER@EXAMPLE.COM", gender: "M" },
+});
+
+if (out.status === "SUCCESS") {
+  // out.result is Record<string, unknown>
+  console.log(out.result.client);
+  // { phone: '79991112233', email: 'user@example.com', gender: 'MALE' }
 }
 ```
 
-Types are available at `types/index.d.ts` and auto-resolved via `package.json` `types` field.
+All operator shapes (`FromOperator`, `MapValueOperator`, `TransformArgs`, etc.) are exported from `types/index.d.ts` for use in typed definition builders.
 
 ---
 
 ## JSON Schema
 
 A formal JSON Schema for mapping definitions is at `schema/mapping-definition.v1.schema.json`. Use it for editor validation, IDE autocompletion, or external CI checks independent of the runtime validator.
+
+---
+
+## Benchmarks
+
+```bash
+node benchmarks/run.mjs
+```
+
+Measures `compile()`, `execute()` (the production hot path), and `run()` (one-off). On a representative mapping with all operator types: `execute()` runs at ~187K ops/s; `compile()` at ~40K ops/s. See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for interpretation and limitations.
 
 ---
 
@@ -355,7 +404,7 @@ All v1.0.0 operators are **Stable**.
 A formal JSON Schema for mapping definitions is available as a stable importable subpath:
 
 ```js
-const schema = require('@processengine/mappings/schema/mapping-definition.v1.schema.json');
+const schema = require("@processengine/mappings/schema/mapping-definition.v1.schema.json");
 ```
 
 The schema covers the structural shape of all operators and their argument types. It does **not** cover runtime-only invariants: source path syntax, cross-references between paths and declared sources, conflicting target paths. Those are enforced by `compile()` and `validate()`. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for details.

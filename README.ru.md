@@ -28,32 +28,37 @@ npm install @processengine/mappings
 ## Быстрый старт
 
 ```js
-const { MappingEngine } = require('@processengine/mappings');
+const { MappingEngine } = require("@processengine/mappings");
 
 const engine = new MappingEngine();
 
 const definition = {
-  mappingId: 'client.normalize.v1',
-  sources: { raw: 'object' },
+  mappingId: "client.normalize.v1",
+  sources: { raw: "object" },
   output: {
-    'client.phone':    { removeNonDigits: 'sources.raw.phone'    },
-    'client.email':    { lowercase:       'sources.raw.email'    },
-    'client.name':     { normalizeSpaces: 'sources.raw.fullName' },
-    'client.gender': {
+    "client.phone": { removeNonDigits: "sources.raw.phone" },
+    "client.email": { lowercase: "sources.raw.email" },
+    "client.name": { normalizeSpaces: "sources.raw.fullName" },
+    "client.gender": {
       transform: {
-        from: 'sources.raw.gender',
+        from: "sources.raw.gender",
         steps: [
-          { trim:      true },
+          { trim: true },
           { uppercase: true },
-          { mapValue: { map: { М: 'MALE', M: 'MALE', Ж: 'FEMALE', F: 'FEMALE' }, fallback: null } },
+          {
+            mapValue: {
+              map: { М: "MALE", M: "MALE", Ж: "FEMALE", F: "FEMALE" },
+              fallback: null,
+            },
+          },
         ],
       },
     },
-    'client.currency': {
+    "client.currency": {
       mapValue: {
-        from: 'sources.raw.currencyCode',
-        map:  { RUR: 'RUB', '643': 'RUB', '840': 'USD' },
-        fallback: 'passthrough',
+        from: "sources.raw.currencyCode",
+        map: { RUR: "RUB", 643: "RUB", 840: "USD" },
+        fallback: "passthrough",
       },
     },
   },
@@ -63,11 +68,11 @@ const result = engine.run({
   definition,
   sources: {
     raw: {
-      phone:        '+7 (999) 111-22-33',
-      email:        'CUSTOMER@EXAMPLE.COM',
-      fullName:     '  Иван   Иванов  ',
-      gender:       ' m ',
-      currencyCode: 'RUR',
+      phone: "+7 (999) 111-22-33",
+      email: "CUSTOMER@EXAMPLE.COM",
+      fullName: "  Иван   Иванов  ",
+      gender: " m ",
+      currencyCode: "RUR",
     },
   },
 });
@@ -92,23 +97,23 @@ console.log(result);
 
 ### Структурный маппинг
 
-| Оператор   | Что делает                                                              |
-|------------|-------------------------------------------------------------------------|
-| `from`     | Копирует значение из источника по пути                                  |
-| `literal`  | Вставляет константу                                                     |
-| `exists`   | Проверяет наличие не-null значения → boolean                            |
-| `equals`   | Строгое сравнение (`===`) с литералом → boolean                         |
-| `coalesce` | Первое не-null значение из 1–4 кандидатов (path или literal)            |
+| Оператор   | Что делает                                                   |
+| ---------- | ------------------------------------------------------------ |
+| `from`     | Копирует значение из источника по пути                       |
+| `literal`  | Вставляет константу                                          |
+| `exists`   | Проверяет наличие не-null значения → boolean                 |
+| `equals`   | Строгое сравнение (`===`) с литералом → boolean              |
+| `coalesce` | Первое не-null значение из 1–4 кандидатов (path или literal) |
 
 ### Форматная нормализация
 
-| Оператор          | Что делает                                             |
-|-------------------|--------------------------------------------------------|
-| `trim`            | Убирает ведущие и хвостовые пробелы                    |
-| `lowercase`       | Приводит к нижнему регистру                            |
-| `uppercase`       | Приводит к верхнему регистру                           |
-| `normalizeSpaces` | Trim + схлопывание внутренних пробелов                 |
-| `removeNonDigits` | Оставляет только цифры `[0-9]`                         |
+| Оператор          | Что делает                             |
+| ----------------- | -------------------------------------- |
+| `trim`            | Убирает ведущие и хвостовые пробелы    |
+| `lowercase`       | Приводит к нижнему регистру            |
+| `uppercase`       | Приводит к верхнему регистру           |
+| `normalizeSpaces` | Trim + схлопывание внутренних пробелов |
+| `removeNonDigits` | Оставляет только цифры `[0-9]`         |
 
 Все строковые операторы: поле не создаётся, если значение не является строкой, равно null или путь не разрешился. Исключение: `removeNonDigits` создаёт пустую строку `""`, если после фильтрации ничего не осталось.
 
@@ -128,6 +133,7 @@ console.log(result);
 `mapValue` не выполняет неявного приведения типов: число `643` и строка `"643"` — разные значения.
 
 Варианты `fallback`:
+
 - отсутствует — поле не создаётся
 - `null` — поле создаётся со значением null
 - JSON-safe literal — поле создаётся с этим значением
@@ -200,6 +206,7 @@ mappings list examples/mappings
 ## Границы библиотеки
 
 Библиотека не содержит и не будет содержать:
+
 - условных операторов (`if`/`else`)
 - арифметики
 - регулярных выражений

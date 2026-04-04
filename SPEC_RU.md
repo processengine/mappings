@@ -10,7 +10,7 @@
 
 ### 1.1 Что делает библиотека
 
-`@processengine/mappings` это декларативная библиотека трансформации и нормализации JSON-данных. Она позволяет описать по конфигурации, как из одного или нескольких JSON-объектов собрать новый JSON и привести значения к каноническому виду.
+`@processengine/mappings` — декларативная библиотека трансформации и нормализации JSON-данных. Она позволяет описать по конфигурации, как из одного или нескольких JSON-объектов собрать новый JSON и привести значения к каноническому виду.
 
 Библиотека решает задачи:
 
@@ -237,7 +237,7 @@ JSON-safe literal: string, конечное число (не NaN, Infinity, -Inf
 
 ### 5.1 `trim`
 
-Убирает ведущие и хвостовые пробельные символы: пробел (`\u0020`), `\t`, `\n`, `\r`.
+Убирает ведущие и хвостовые пробельные символы через `String.prototype.trim()`. Покрывает тот же набор Unicode-символов, что и `\s` в `normalizeSpaces` (см. 5.4). Помимо `\u0020`, `\t`, `\n`, `\r`, это включает вертикальную табуляцию, разрыв страницы и неразрывный пробел (`\u00A0`).
 
 ```json
 "client.name": { "trim": "sources.req.rawName" }
@@ -268,6 +268,20 @@ JSON-safe literal: string, конечное число (не NaN, Infinity, -Inf
 ### 5.4 `normalizeSpaces`
 
 Trim + замена всех внутренних последовательностей пробельных символов на один пробел (`\u0020`).
+
+**Что считается пробельным символом:** реализация использует регулярное выражение JavaScript `\s`, которое покрывает:
+- пробел (`\u0020`)
+- горизонтальная табуляция (`\u0009`, `\t`)
+- перевод строки (`\u000A`, `\n`)
+- возврат каретки (`\u000D`, `\r`)
+- вертикальная табуляция (`\u000B`)
+- разрыв страницы (`\u000C`, `\f`)
+- неразрывный пробел (`\u00A0`)
+- другие Unicode-пробелы, распознаваемые движком JavaScript как `\s`
+
+Это тот же набор, что используется `String.prototype.trim()` в операторах `trim` и `normalizeSpaces`. Поведение детерминировано для конкретной версии Node.js, но теоретически может отличаться между платформами. Для v1 это является частью контракта оператора.
+
+Если требуется обработка только ASCII-пробелов (`\u0020`, `\t`, `\n`, `\r`), используйте `transform` с явной цепочкой шагов.
 
 ```json
 "client.fullName": { "normalizeSpaces": "sources.req.name" }
@@ -342,12 +356,12 @@ Trim + замена всех внутренних последовательно
 
 ### 6.3 Семантика `fallback`
 
-| Значение `fallback` | Поведение при ненайденном ключе                    |
-| ------------------- | -------------------------------------------------- |
-| отсутствует         | `outputCreated = false`, поле не создаётся         |
-| `null`              | `outputCreated = true`, значение `null`            |
-| JSON-safe literal   | `outputCreated = true`, значение — этот литерал    |
-| `"passthrough"`     | `outputCreated = true`, значение — исходная строка |
+| Значение `fallback`   | Поведение при ненайденном ключе                   |
+|-----------------------|---------------------------------------------------|
+| отсутствует           | `outputCreated = false`, поле не создаётся        |
+| `null`                | `outputCreated = true`, значение `null`           |
+| JSON-safe literal     | `outputCreated = true`, значение — этот литерал   |
+| `"passthrough"`       | `outputCreated = true`, значение — исходная строка |
 
 В шаговой форме при `outputCreated = false` цепочка прерывается.
 
@@ -454,13 +468,13 @@ const result = engine.run({ definition, sources, trace: true });
 
 ```json
 {
-  "target": "client.name",
-  "op": "trim",
-  "path": "sources.req.rawName",
-  "resolved": true,
-  "inputValue": "  Иван  ",
+  "target":        "client.name",
+  "op":            "trim",
+  "path":          "sources.req.rawName",
+  "resolved":      true,
+  "inputValue":    "  Иван  ",
   "outputCreated": true,
-  "outputValue": "Иван"
+  "outputValue":   "Иван"
 }
 ```
 
@@ -470,14 +484,14 @@ const result = engine.run({ definition, sources, trace: true });
 
 ```json
 {
-  "target": "payment.currency",
-  "op": "mapValue",
-  "path": "sources.req.currencyCode",
-  "resolved": true,
-  "inputValue": "RUR",
-  "matched": true,
+  "target":        "payment.currency",
+  "op":            "mapValue",
+  "path":          "sources.req.currencyCode",
+  "resolved":      true,
+  "inputValue":    "RUR",
+  "matched":       true,
   "outputCreated": true,
-  "outputValue": "RUB"
+  "outputValue":   "RUB"
 }
 ```
 
@@ -487,24 +501,18 @@ const result = engine.run({ definition, sources, trace: true });
 
 ```json
 {
-  "target": "client.gender",
-  "op": "transform",
-  "path": "sources.raw.gender",
-  "resolved": true,
-  "inputValue": " m ",
+  "target":        "client.gender",
+  "op":            "transform",
+  "path":          "sources.raw.gender",
+  "resolved":      true,
+  "inputValue":    " m ",
   "steps": [
-    { "op": "trim", "in": " m ", "out": "m", "applied": true },
-    { "op": "uppercase", "in": "m", "out": "M", "applied": true },
-    {
-      "op": "mapValue",
-      "in": "M",
-      "out": "MALE",
-      "applied": true,
-      "matched": true
-    }
+    { "op": "trim",      "in": " m ",  "out": "m",    "applied": true },
+    { "op": "uppercase", "in": "m",    "out": "M",    "applied": true },
+    { "op": "mapValue",  "in": "M",    "out": "MALE", "applied": true, "matched": true }
   ],
   "outputCreated": true,
-  "outputValue": "MALE"
+  "outputValue":   "MALE"
 }
 ```
 
@@ -514,24 +522,17 @@ const result = engine.run({ definition, sources, trace: true });
 
 ```json
 {
-  "target": "client.gender",
-  "op": "transform",
-  "path": "sources.raw.gender",
-  "resolved": true,
-  "inputValue": " UNKNOWN ",
+  "target":        "client.gender",
+  "op":            "transform",
+  "path":          "sources.raw.gender",
+  "resolved":      true,
+  "inputValue":    " UNKNOWN ",
   "steps": [
-    { "op": "trim", "in": " UNKNOWN ", "out": "UNKNOWN", "applied": true },
-    {
-      "op": "mapValue",
-      "in": "UNKNOWN",
-      "applied": false,
-      "stoppedChain": true,
-      "reason": "no_match",
-      "matched": false
-    }
+    { "op": "trim",     "in": " UNKNOWN ", "out": "UNKNOWN", "applied": true },
+    { "op": "mapValue", "in": "UNKNOWN",   "applied": false, "stoppedChain": true, "reason": "no_match", "matched": false }
   ],
   "outputCreated": false,
-  "reason": "chain_stopped"
+  "reason":        "chain_stopped"
 }
 ```
 
@@ -555,25 +556,25 @@ const result = engine.run({ definition, sources, trace: true });
 
 ### 10.1 Коды ошибок конфигурации (до исполнения)
 
-| Код                          | Условие                                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `INVALID_MAPPING_SCHEMA`     | `definition` не является plain object; `output` не plain object; поле output не имеет оператора или имеет несколько |
-| `INVALID_MAPPING_ID`         | `mappingId` отсутствует, не строка или пустая строка                                                                |
-| `UNKNOWN_OPERATOR`           | Неизвестный ключ оператора в поле output                                                                            |
-| `INVALID_ARGS`               | Некорректные аргументы оператора                                                                                    |
-| `INVALID_SOURCE_DECLARATION` | `sources` не plain object; тип источника не `"object"`                                                              |
-| `INVALID_PATH`               | Нарушение синтаксиса исходного пути                                                                                 |
-| `INVALID_TARGET_PATH`        | Нарушение синтаксиса целевого пути                                                                                  |
-| `CONFLICTING_TARGET_PATHS`   | Один целевой путь является префиксом другого                                                                        |
+| Код                        | Условие                                                             |
+|----------------------------|---------------------------------------------------------------------|
+| `INVALID_MAPPING_SCHEMA`   | `definition` не является plain object; `output` не plain object; поле output не имеет оператора или имеет несколько |
+| `INVALID_MAPPING_ID`       | `mappingId` отсутствует, не строка или пустая строка               |
+| `UNKNOWN_OPERATOR`         | Неизвестный ключ оператора в поле output                           |
+| `INVALID_ARGS`             | Некорректные аргументы оператора                                   |
+| `INVALID_SOURCE_DECLARATION` | `sources` не plain object; тип источника не `"object"`           |
+| `INVALID_PATH`             | Нарушение синтаксиса исходного пути                                |
+| `INVALID_TARGET_PATH`      | Нарушение синтаксиса целевого пути                                 |
+| `CONFLICTING_TARGET_PATHS` | Один целевой путь является префиксом другого                       |
 
 ### 10.2 Коды ошибок выполнения (во время исполнения)
 
-| Код                      | Условие                                                                                                     |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `MISSING_SOURCE`         | Объявленный источник не передан в `sources`                                                                 |
-| `INVALID_SOURCE_TYPE`    | `sources` не plain object; переданный источник не plain object                                              |
+| Код                      | Условие                                                                  |
+|--------------------------|--------------------------------------------------------------------------|
+| `MISSING_SOURCE`         | Объявленный источник не передан в `sources`                              |
+| `INVALID_SOURCE_TYPE`    | `sources` не plain object; переданный источник не plain object           |
 | `INVALID_SOURCE_CONTENT` | Источник содержит не-JSON-safe значения: NaN, Infinity, Date, Map, Set, BigInt, функции, циклические ссылки |
-| `INTERNAL_ERROR`         | Непредвиденная ошибка внутри библиотеки                                                                     |
+| `INTERNAL_ERROR`         | Непредвиденная ошибка внутри библиотеки                                  |
 
 ---
 
@@ -614,11 +615,7 @@ const result = engine.run({ definition, sources, trace: true });
 ### 12.1 `MappingEngine` и `compile`
 
 ```js
-const {
-  MappingEngine,
-  compile,
-  CompiledMapping,
-} = require("@processengine/mappings");
+const { MappingEngine, compile, CompiledMapping } = require('@processengine/mappings');
 ```
 
 #### Иммутабельность `CompiledMapping`
@@ -638,7 +635,6 @@ const {
 Проверяет описание маппинга без его выполнения.
 
 Возвращает `MappingResult`:
-
 - при успехе: `{ status: 'SUCCESS', mappingId }`
 - при ошибке: `{ status: 'MAPPING_ERROR', mappingId?, error: { code, message } }`
 
@@ -649,13 +645,11 @@ const {
 Проверяет и выполняет маппинг.
 
 Параметры:
-
 - `definition` — объект описания маппинга;
 - `sources` — словарь `{ имя: plain object }`;
 - `trace` — boolean, по умолчанию `false`.
 
 Возвращает `MappingResult`:
-
 - при успехе: `{ status: 'SUCCESS', mappingId, result: { ... } }`
 - при успехе с трассировкой: добавляется поле `trace: [...]`
 - при ошибке: `{ status: 'MAPPING_ERROR', mappingId?, error: { code, message } }`

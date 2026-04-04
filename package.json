@@ -16,19 +16,21 @@
     "mappings": "bin/mappings.js"
   },
   "files": [
-    "src/",
-    "bin/",
-    "types/",
-    "schema/",
-    "docs/",
+    "CHANGELOG.md",
+    "LICENSE",
     "README.md",
     "README.ru.md",
     "SPEC_RU.md",
-    "CHANGELOG.md",
-    "LICENSE"
+    "benchmarks/",
+    "bin/",
+    "docs/",
+    "schema/",
+    "src/",
+    "types/"
   ],
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "bench": "node benchmarks/run.mjs"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -1,4 +1,4 @@
-# Compatibility Policy — @processengine/mappings
+# Compatibility Policy: @processengine/mappings
 
 **Document version:** 1.0  
 **Applies from:** v1.0.0
@@ -20,6 +20,7 @@ This library follows [Semantic Versioning 2.0.0](https://semver.org/):
 ### DSL (MappingDefinition)
 
 **Breaking:**
+
 - removing an existing operator
 - changing the semantics of an existing operator
 - changing the argument format of an existing operator
@@ -28,6 +29,7 @@ This library follows [Semantic Versioning 2.0.0](https://semver.org/):
 - reducing the allowed `steps` range in `transform`
 
 **Non-breaking (minor):**
+
 - adding a new operator
 - adding a new optional field to an existing operator's arguments
 - adding a new valid `fallback` value
@@ -35,6 +37,7 @@ This library follows [Semantic Versioning 2.0.0](https://semver.org/):
 ### Public API
 
 **Breaking:**
+
 - renaming or removing `MappingEngine`, `compile`, `CompiledMapping`
 - changing the signature of `compile()`, `validate()`, `run()`, `execute()`
 - changing the structure of `MappingResult` (fields `status`, `mappingId`, `result`, `error`)
@@ -42,6 +45,7 @@ This library follows [Semantic Versioning 2.0.0](https://semver.org/):
 - renaming existing error codes
 
 **Non-breaking:**
+
 - adding new error codes
 - adding new optional fields to `MappingError`
 - adding new methods or properties to `MappingEngine` or `CompiledMapping`
@@ -49,30 +53,36 @@ This library follows [Semantic Versioning 2.0.0](https://semver.org/):
 ### Trace contract
 
 **Breaking:**
+
 - changing or removing existing trace entry fields
 - changing the meaning of existing field values
 
 **Non-breaking:**
+
 - adding new optional fields to trace entries
 - adding trace fields for new operators
 
 ### Error model
 
 **Breaking:**
+
 - removing or renaming a `code` value
 - changing which phase (`compile` / `execute`) an error belongs to
 
 **Non-breaking:**
+
 - adding new `code` values
 - adding new optional location fields (`operator`, `targetPath`, `from`, `stepIndex`)
 
 ### CLI
 
 **Breaking:**
+
 - changing exit codes
 - changing the `--json` output format
 
 **Non-breaking:**
+
 - adding new commands
 - adding new flags to existing commands
 
@@ -112,6 +122,7 @@ These boundaries protect the library's architectural role as a data preparation 
 `compile(definition)` produces a `CompiledMapping` that is independent of the original `definition` object. The internal representation is a deep clone with deep freeze applied.
 
 This means:
+
 - mutating the `definition` object after `compile()` does not affect `execute()`
 - the compiled artifact is safe to share across concurrent execution contexts
 - `execute()` always works against the definition state at the moment of compilation
@@ -126,16 +137,18 @@ The JSON Schema at `schema/mapping-definition.v1.schema.json` is a formal, impor
 
 ```js
 // Node.js
-const schema = require('@processengine/mappings/schema/mapping-definition.v1.schema.json');
+const schema = require("@processengine/mappings/schema/mapping-definition.v1.schema.json");
 ```
 
 **What the schema covers:**
+
 - required top-level fields (`mappingId`, `sources`, `output`)
 - all operator argument shapes and types
 - both forms of `mapValue` (root and step)
 - `transform.steps` structure and argument types
 
 **What the schema intentionally does not cover** (runtime-only invariants):
+
 - `sources.*` path syntax validation (`sources.<n>.<field>`)
 - target path conflict detection (one path being a prefix of another)
 - cross-referencing: whether a source name used in a path is declared in `sources`
@@ -150,6 +163,7 @@ These invariants require runtime context and are enforced by the runtime validat
 Trace contains operator input and output values, which may include personally identifiable information after normalization (names, phone numbers, document numbers, emails).
 
 Recommendations for production:
+
 - disable trace (`trace: false`, the default) in standard production execution paths
 - if trace is required for diagnostics, mask or filter values before logging
 - do not store unmasked trace output in systems that do not meet applicable data protection requirements
