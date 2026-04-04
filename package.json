@@ -1,6 +1,6 @@
 {
   "name": "@processengine/mappings",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Declarative JSON mapping and normalization library for processengine",
   "main": "src/index.js",
   "types": "types/index.d.ts",
