@@ -1,0 +1,44 @@
+{
+  "mappingId": "client.normalize_client_data.v1",
+  "sources": {
+    "raw": "object"
+  },
+  "output": {
+    "client.phone":        { "removeNonDigits": "sources.raw.phone" },
+    "client.email":        { "lowercase":       "sources.raw.email" },
+    "client.name":         { "normalizeSpaces": "sources.raw.fullName" },
+    "client.gender": {
+      "transform": {
+        "from": "sources.raw.gender",
+        "steps": [
+          { "trim":     true },
+          { "uppercase": true },
+          { "mapValue": {
+              "map": {
+                "М":      "MALE",
+                "M":      "MALE",
+                "MALE":   "MALE",
+                "Ж":      "FEMALE",
+                "F":      "FEMALE",
+                "FEMALE": "FEMALE"
+              },
+              "fallback": null
+          }}
+        ]
+      }
+    },
+    "client.currency": {
+      "mapValue": {
+        "from": "sources.raw.currencyCode",
+        "map": {
+          "RUR": "RUB",
+          "643": "RUB",
+          "840": "USD",
+          "978": "EUR"
+        },
+        "fallback": "passthrough"
+      }
+    },
+    "client.hasDocument": { "exists": "sources.raw.documentNumber" }
+  }
+}

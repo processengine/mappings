@@ -1,0 +1,55 @@
+{
+  "name": "@processengine/mappings",
+  "version": "1.0.0",
+  "description": "Declarative JSON mapping and normalization library for processengine",
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./schema/mapping-definition.v1.schema.json": "./schema/mapping-definition.v1.schema.json",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "mappings": "bin/mappings.js"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "types/",
+    "schema/",
+    "docs/",
+    "README.md",
+    "README.ru.md",
+    "SPEC_RU.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "json",
+    "mapping",
+    "normalization",
+    "transformation",
+    "declarative",
+    "dsl",
+    "orchestration",
+    "processengine"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/processengine/mappings.git"
+  },
+  "homepage": "https://github.com/processengine/mappings#readme",
+  "bugs": {
+    "url": "https://github.com/processengine/mappings/issues"
+  }
+}

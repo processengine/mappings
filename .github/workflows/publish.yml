@@ -1,0 +1,48 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Smoke test CLI — validate file
+        run: node bin/mappings.js validate-file examples/mappings/client/normalize_client_data.v1.json --json
+
+      - name: Smoke test CLI — compile
+        run: node bin/mappings.js compile examples/mappings/client/normalize_client_data.v1.json --json
+
+      - name: Smoke test CLI — run file with trace
+        run: node bin/mappings.js run-file examples/mappings/client/normalize_client_data.v1.json --sources examples/sources/client_raw.json --trace
+
+      - name: Verify package contents
+        run: npm pack
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

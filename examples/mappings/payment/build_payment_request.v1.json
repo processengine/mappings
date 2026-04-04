@@ -1,0 +1,17 @@
+{
+  "mappingId": "payment.build_payment_request.v1",
+  "sources": {
+    "order":   "object",
+    "payment": "object"
+  },
+  "output": {
+    "request.orderId":        { "from":   "sources.order.id" },
+    "request.amount":         { "from":   "sources.order.total.amount" },
+    "request.currency":       { "from":   "sources.order.total.currency" },
+    "request.customerEmail":  { "from":   "sources.order.customer.email" },
+    "request.paymentMethod":  { "from":   "sources.payment.method" },
+    "flags.isCard":           { "equals": ["sources.payment.method", "card"] },
+    "flags.hasCustomerEmail": { "exists": "sources.order.customer.email" },
+    "meta.mappingId":         { "literal": "payment.build_payment_request.v1" }
+  }
+}
