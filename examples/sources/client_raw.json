@@ -1,10 +1,10 @@
 {
   "raw": {
-    "phone":          "+7 (999) 111-22-33",
-    "email":          "CUSTOMER@EXAMPLE.COM",
-    "fullName":       "  Иван   Иванов  ",
-    "gender":         " m ",
-    "currencyCode":   "RUR",
-    "documentNumber": "4510 123456"
+    "phone": "+49 (151) 111-22-33",
+    "email": "USER@EXAMPLE.COM",
+    "fullName": "  Ada   Lovelace  ",
+    "category": " a ",
+    "countryCode": "DEU",
+    "documentId": "DOC-12345"
   }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFile, readdir } from 'node:fs/promises';
-import path from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   validateMappings,
   prepareMappings,
@@ -11,46 +11,48 @@ import {
   MappingsRuntimeError,
 } from '../dist/index.js';
 
+const COMMANDS = new Set(['validate-file', 'compile', 'run-file', 'validate-dir', 'list', '--help', '-h', 'help']);
+
 function printUsage() {
-  console.log(`Usage:
+  console.log(`mappings CLI
+
+Usage:
+  mappings <mapping-file.json>
   mappings validate-file <mapping-file.json> [--json]
   mappings compile <mapping-file.json> [--json]
-  mappings run-file <mapping-file.json> --sources <sources-file.json> [--trace[=basic|verbose]] [--json]
+  mappings run-file <mapping-file.json> --sources <sources.json> [--trace [basic|verbose]] [--json]
   mappings validate-dir <directory> [--json]
   mappings list <directory> [--json]
-
-Notes:
-  --trace without value means trace=basic.
-  The legacy single-argument mode is still supported:
-    mappings <mapping-file.json>`);
+`);
 }
 
-function parseOptions(argv) {
-  const options = { _: [] };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
+function parseOptions(args) {
+  const options = { json: false, trace: false, sourcesPath: null };
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
     if (arg === '--json') {
       options.json = true;
       continue;
     }
-    if (arg === '--trace') {
-      options.trace = 'basic';
-      continue;
-    }
-    if (arg.startsWith('--trace=')) {
-      options.trace = arg.slice('--trace='.length) || 'basic';
-      continue;
-    }
     if (arg === '--sources') {
-      options.sources = argv[i + 1];
+      options.sourcesPath = args[i + 1] ?? null;
       i += 1;
       continue;
     }
-    if (arg === '--help' || arg === '-h') {
-      options.help = true;
+    if (arg === '--trace') {
+      const next = args[i + 1];
+      if (next === 'basic' || next === 'verbose') {
+        options.trace = next;
+        i += 1;
+      } else {
+        options.trace = 'basic';
+      }
       continue;
     }
-    options._.push(arg);
+    if (arg.startsWith('--trace=')) {
+      const value = arg.slice('--trace='.length);
+      options.trace = value === 'verbose' ? 'verbose' : 'basic';
+    }
   }
   return options;
 }
@@ -60,220 +62,200 @@ async function readJsonFile(filePath) {
   return JSON.parse(raw);
 }
 
-function isLikelyMappingSource(value) {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && typeof value.sources === 'object' && value.output && typeof value.output === 'object');
+function isMappingSource(value) {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      typeof value.mappingId === 'string' &&
+      value.sources &&
+      typeof value.sources === 'object' &&
+      !Array.isArray(value.sources) &&
+      value.output &&
+      typeof value.output === 'object' &&
+      !Array.isArray(value.output),
+  );
 }
 
-async function walkJsonFiles(dirPath) {
+async function collectJsonFiles(dirPath, files = []) {
   const entries = await readdir(dirPath, { withFileTypes: true });
-  const files = [];
   for (const entry of entries) {
     if (entry.name === '.DS_Store') continue;
-    const fullPath = path.join(dirPath, entry.name);
+    const fullPath = join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      files.push(...(await walkJsonFiles(fullPath)));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith('.json')) {
+      await collectJsonFiles(fullPath, files);
+    } else if (entry.isFile() && entry.name.endsWith('.json')) {
       files.push(fullPath);
     }
   }
-  return files.sort();
+  return files;
 }
 
-function emit(data, asJson) {
-  if (asJson) {
-    console.log(JSON.stringify(data, null, 2));
-    return;
-  }
-  if (typeof data === 'string') {
-    console.log(data);
-    return;
-  }
-  console.log(JSON.stringify(data, null, 2));
+function printJson(value) {
+  console.log(JSON.stringify(value, null, 2));
+}
+
+function toArtifactSummary(artifact) {
+  return {
+    artifactType: artifact.type,
+    mappingId: artifact.mappingId,
+    version: artifact.version,
+  };
 }
 
 async function commandValidateFile(filePath, options) {
   const source = await readJsonFile(filePath);
   const result = validateMappings(source);
   if (options.json) {
-    emit({ file: filePath, ...result }, true);
+    printJson(result);
   } else if (result.ok) {
     console.log(`OK: ${source.mappingId ?? '<unknown>'}`);
   } else {
     console.error(formatMappingsDiagnostics(result.diagnostics));
   }
-  return result.ok ? 0 : 2;
+  process.exit(result.ok ? 0 : 2);
 }
 
 async function commandCompile(filePath, options) {
-  const source = await readJsonFile(filePath);
   try {
+    const source = await readJsonFile(filePath);
     const artifact = prepareMappings(source);
-    const payload = {
-      ok: true,
-      artifact: {
-        type: artifact.type,
-        mappingId: artifact.mappingId,
-        version: artifact.version,
-      },
-    };
-    emit(options.json ? payload : `Prepared: ${artifact.mappingId ?? '<unknown>'}`, options.json);
-    return 0;
+    const payload = toArtifactSummary(artifact);
+    if (options.json) {
+      printJson(payload);
+    } else {
+      console.log(`Prepared: ${payload.mappingId}`);
+    }
   } catch (error) {
     if (error instanceof MappingsCompileError) {
-      const payload = { ok: false, code: error.code, diagnostics: error.diagnostics };
-      if (options.json) {
-        emit(payload, true);
-      } else {
-        console.error(formatMappingsDiagnostics(error.diagnostics));
-      }
-      return 2;
+      console.error(formatMappingsDiagnostics(error.diagnostics));
+      process.exit(2);
     }
     throw error;
   }
 }
 
 async function commandRunFile(filePath, options) {
-  if (!options.sources) {
-    console.error('Missing required option: --sources <sources-file.json>');
-    return 1;
+  if (!options.sourcesPath) {
+    console.error('Missing required option --sources <sources.json>');
+    process.exit(1);
   }
-  const source = await readJsonFile(filePath);
-  const sources = await readJsonFile(options.sources);
-  const artifact = prepareMappings(source);
-  const result = executeMappings(artifact, sources, {
-    trace: options.trace ?? false,
-  });
-  emit(options.json ? result : result.output, options.json);
-  return 0;
+  try {
+    const source = await readJsonFile(filePath);
+    const sources = await readJsonFile(options.sourcesPath);
+    const artifact = prepareMappings(source);
+    const result = executeMappings(artifact, sources, { trace: options.trace });
+    if (options.json || options.trace) {
+      printJson(result);
+    } else {
+      printJson(result.output);
+    }
+  } catch (error) {
+    if (error instanceof MappingsCompileError) {
+      console.error(formatMappingsDiagnostics(error.diagnostics));
+      process.exit(2);
+    }
+    if (error instanceof MappingsRuntimeError) {
+      console.error(formatMappingsRuntimeError(error));
+      process.exit(2);
+    }
+    throw error;
+  }
 }
 
 async function commandValidateDir(dirPath, options) {
-  const files = await walkJsonFiles(dirPath);
-  const checked = [];
-  const skipped = [];
+  const jsonFiles = await collectJsonFiles(dirPath);
+  const results = [];
   let hasErrors = false;
 
-  for (const file of files) {
-    const value = await readJsonFile(file);
-    if (!isLikelyMappingSource(value)) {
-      skipped.push(file);
-      continue;
+  for (const file of jsonFiles) {
+    try {
+      const source = await readJsonFile(file);
+      if (!isMappingSource(source)) continue;
+      const result = validateMappings(source);
+      results.push({ file: file.replace(/\\/g, '/'), mappingId: source.mappingId, ok: result.ok, diagnostics: result.diagnostics });
+      if (!result.ok) hasErrors = true;
+    } catch (error) {
+      results.push({ file: file.replace(/\\/g, '/'), ok: false, diagnostics: [{ code: 'INVALID_JSON', level: 'error', message: error.message }] });
+      hasErrors = true;
     }
-    const result = validateMappings(value);
-    checked.push({
-      file,
-      mappingId: value.mappingId ?? null,
-      ok: result.ok,
-      diagnostics: result.diagnostics,
-    });
-    if (!result.ok) hasErrors = true;
   }
-
-  const payload = {
-    ok: !hasErrors,
-    checkedCount: checked.length,
-    skippedCount: skipped.length,
-    checked,
-    skipped,
-  };
 
   if (options.json) {
-    emit(payload, true);
+    printJson({ ok: !hasErrors, results });
   } else {
-    for (const item of checked) {
-      console.log(`${item.ok ? 'OK' : 'ERROR'} ${item.mappingId ?? '<unknown>'} — ${item.file}`);
-      if (!item.ok) {
-        console.error(formatMappingsDiagnostics(item.diagnostics));
+    for (const item of results) {
+      console.log(`${item.ok ? 'OK' : 'ERROR'} ${item.file}${item.mappingId ? ` (${item.mappingId})` : ''}`);
+      if (!item.ok && Array.isArray(item.diagnostics)) {
+        console.log(formatMappingsDiagnostics(item.diagnostics));
       }
     }
-    console.log(`Checked: ${checked.length}, skipped: ${skipped.length}`);
   }
-
-  return hasErrors ? 2 : 0;
+  process.exit(hasErrors ? 2 : 0);
 }
 
 async function commandList(dirPath, options) {
-  const files = await walkJsonFiles(dirPath);
+  const jsonFiles = await collectJsonFiles(dirPath);
   const items = [];
-  for (const file of files) {
-    const value = await readJsonFile(file);
-    if (!isLikelyMappingSource(value)) continue;
-    items.push({
-      mappingId: value.mappingId ?? null,
-      file,
-    });
-  }
-  if (options.json) {
-    emit(items, true);
-  } else {
-    for (const item of items) {
-      console.log(`${item.mappingId ?? '<unknown>'}\t${item.file}`);
+  for (const file of jsonFiles) {
+    try {
+      const source = await readJsonFile(file);
+      if (!isMappingSource(source)) continue;
+      items.push({ file: file.replace(/\\/g, '/'), mappingId: source.mappingId });
+    } catch {
+      // ignore invalid JSON in list mode
     }
   }
-  return 0;
+
+  if (options.json) {
+    printJson(items);
+  } else {
+    for (const item of items) {
+      console.log(`${item.mappingId}  ${item.file}`);
+    }
+  }
 }
 
 async function main() {
-  const options = parseOptions(process.argv.slice(2));
-  const [command, ...rest] = options._;
+  const args = process.argv.slice(2);
+  const first = args[0];
 
-  if (options.help) {
+  if (!first || first === '--help' || first === '-h' || first === 'help') {
     printUsage();
     return;
   }
 
-  if (!command) {
+  if (!COMMANDS.has(first)) {
+    return commandValidateFile(resolve(first), { json: false, trace: false, sourcesPath: null });
+  }
+
+  const command = first;
+  const target = args[1];
+  const options = parseOptions(args.slice(2));
+
+  if (!target && command !== '--help' && command !== '-h' && command !== 'help') {
     printUsage();
     process.exit(1);
   }
 
-  if (!['validate-file', 'compile', 'run-file', 'validate-dir', 'list'].includes(command)) {
-    const exitCode = await commandValidateFile(command, options);
-    process.exit(exitCode);
-  }
-
-  const target = rest[0];
-  if (!target) {
-    printUsage();
-    process.exit(1);
-  }
-
-  let exitCode = 0;
   switch (command) {
     case 'validate-file':
-      exitCode = await commandValidateFile(target, options);
-      break;
+      return commandValidateFile(resolve(target), options);
     case 'compile':
-      exitCode = await commandCompile(target, options);
-      break;
+      return commandCompile(resolve(target), options);
     case 'run-file':
-      exitCode = await commandRunFile(target, options);
-      break;
+      return commandRunFile(resolve(target), options);
     case 'validate-dir':
-      exitCode = await commandValidateDir(target, options);
-      break;
+      return commandValidateDir(resolve(target), options);
     case 'list':
-      exitCode = await commandList(target, options);
-      break;
+      return commandList(resolve(target), options);
     default:
       printUsage();
-      exitCode = 1;
-      break;
+      process.exit(1);
   }
-  process.exit(exitCode);
 }
 
 main().catch((error) => {
-  if (error instanceof MappingsCompileError) {
-    console.error(formatMappingsDiagnostics(error.diagnostics));
-    process.exit(2);
-  }
-  if (error instanceof MappingsRuntimeError) {
-    console.error(formatMappingsRuntimeError(error));
-    process.exit(2);
-  }
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(3);
 });

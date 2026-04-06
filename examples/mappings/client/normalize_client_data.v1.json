@@ -1,44 +1,45 @@
 {
-  "mappingId": "client.normalize_client_data.v1",
+  "mappingId": "profile.normalize_input.v1",
   "sources": {
     "raw": "object"
   },
   "output": {
-    "client.phone":        { "removeNonDigits": "sources.raw.phone" },
-    "client.email":        { "lowercase":       "sources.raw.email" },
-    "client.name":         { "normalizeSpaces": "sources.raw.fullName" },
-    "client.gender": {
+    "profile.phoneDigits": { "removeNonDigits": "sources.raw.phone" },
+    "profile.email": { "lowercase": "sources.raw.email" },
+    "profile.displayName": { "normalizeSpaces": "sources.raw.fullName" },
+    "profile.category": {
       "transform": {
-        "from": "sources.raw.gender",
+        "from": "sources.raw.category",
         "steps": [
-          { "trim":     true },
+          { "trim": true },
           { "uppercase": true },
-          { "mapValue": {
+          {
+            "mapValue": {
               "map": {
-                "М":      "MALE",
-                "M":      "MALE",
-                "MALE":   "MALE",
-                "Ж":      "FEMALE",
-                "F":      "FEMALE",
-                "FEMALE": "FEMALE"
+                "A": "ALPHA",
+                "ALPHA": "ALPHA",
+                "B": "BETA",
+                "BETA": "BETA"
               },
               "fallback": null
-          }}
+            }
+          }
         ]
       }
     },
-    "client.currency": {
+    "profile.country": {
       "mapValue": {
-        "from": "sources.raw.currencyCode",
+        "from": "sources.raw.countryCode",
         "map": {
-          "RUR": "RUB",
-          "643": "RUB",
-          "840": "USD",
-          "978": "EUR"
+          "DE": "DE",
+          "DEU": "DE",
+          "FRA": "FR",
+          "FR": "FR",
+          "ESP": "ES"
         },
         "fallback": "passthrough"
       }
     },
-    "client.hasDocument": { "exists": "sources.raw.documentNumber" }
+    "profile.hasDocument": { "exists": "sources.raw.documentId" }
   }
 }
