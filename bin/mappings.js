@@ -1,267 +1,279 @@
 #!/usr/bin/env node
-'use strict';
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import {
+  validateMappings,
+  prepareMappings,
+  executeMappings,
+  formatMappingsDiagnostics,
+  formatMappingsRuntimeError,
+  MappingsCompileError,
+  MappingsRuntimeError,
+} from '../dist/index.js';
 
-const fs = require('fs');
-const path = require('path');
-const { MappingEngine, compile } = require('../src/index.js');
+function printUsage() {
+  console.log(`Usage:
+  mappings validate-file <mapping-file.json> [--json]
+  mappings compile <mapping-file.json> [--json]
+  mappings run-file <mapping-file.json> --sources <sources-file.json> [--trace[=basic|verbose]] [--json]
+  mappings validate-dir <directory> [--json]
+  mappings list <directory> [--json]
 
-const engine = new MappingEngine();
-const args = process.argv.slice(2);
-const command = args[0];
-
-// ---------------------------------------------------------------------------
-// Вспомогательные функции
-// ---------------------------------------------------------------------------
-
-function readJSON(filePath) {
-  const content = fs.readFileSync(path.resolve(filePath), 'utf8');
-  return JSON.parse(content);
+Notes:
+  --trace without value means trace=basic.
+  The legacy single-argument mode is still supported:
+    mappings <mapping-file.json>`);
 }
 
-/** Вывод результата: JSON или pretty-print в зависимости от флага --json */
-function output(obj, isJson) {
-  console.log(JSON.stringify(obj, null, isJson ? 0 : 2));
+function parseOptions(argv) {
+  const options = { _: [] };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
+    if (arg === '--trace') {
+      options.trace = 'basic';
+      continue;
+    }
+    if (arg.startsWith('--trace=')) {
+      options.trace = arg.slice('--trace='.length) || 'basic';
+      continue;
+    }
+    if (arg === '--sources') {
+      options.sources = argv[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+    options._.push(arg);
+  }
+  return options;
 }
 
-/** Вывод ошибки и завершение с кодом 1 */
-function fail(obj, isJson) {
-  if (isJson) {
-    console.log(JSON.stringify(obj));
+async function readJsonFile(filePath) {
+  const raw = await readFile(filePath, 'utf8');
+  return JSON.parse(raw);
+}
+
+function isLikelyMappingSource(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && typeof value.sources === 'object' && value.output && typeof value.output === 'object');
+}
+
+async function walkJsonFiles(dirPath) {
+  const entries = await readdir(dirPath, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    if (entry.name === '.DS_Store') continue;
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await walkJsonFiles(fullPath)));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith('.json')) {
+      files.push(fullPath);
+    }
+  }
+  return files.sort();
+}
+
+function emit(data, asJson) {
+  if (asJson) {
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+  if (typeof data === 'string') {
+    console.log(data);
+    return;
+  }
+  console.log(JSON.stringify(data, null, 2));
+}
+
+async function commandValidateFile(filePath, options) {
+  const source = await readJsonFile(filePath);
+  const result = validateMappings(source);
+  if (options.json) {
+    emit({ file: filePath, ...result }, true);
+  } else if (result.ok) {
+    console.log(`OK: ${source.mappingId ?? '<unknown>'}`);
   } else {
-    // Для человека — читаемый вывод
-    if (obj.error) {
-      const e = obj.error;
-      const parts = [`[${e.code}] ${e.message}`];
-      if (e.phase)      parts.push(`phase: ${e.phase}`);
-      if (e.targetPath) parts.push(`target: ${e.targetPath}`);
-      if (e.operator)   parts.push(`operator: ${e.operator}`);
-      if (e.from)       parts.push(`from: ${e.from}`);
-      if (e.stepIndex !== undefined) parts.push(`step: ${e.stepIndex}`);
-      console.error(parts.join('  '));
-    } else {
-      console.error(JSON.stringify(obj, null, 2));
-    }
+    console.error(formatMappingsDiagnostics(result.diagnostics));
   }
-  process.exit(1);
+  return result.ok ? 0 : 2;
 }
 
-function findOption(argList, flag) {
-  const idx = argList.indexOf(flag);
-  if (idx === -1 || idx + 1 >= argList.length) return null;
-  return argList[idx + 1];
-}
-
-function hasFlag(argList, flag) {
-  return argList.includes(flag);
-}
-
-function findJsonFiles(dir) {
-  const results = [];
-  function walk(d) {
-    let entries;
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); }
-    catch (e) { console.error(`Cannot read directory: ${d}`); process.exit(1); }
-    for (const entry of entries) {
-      const full = path.join(d, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith('.json')) results.push(full);
-    }
-  }
-  walk(dir);
-  return results;
-}
-
-function exitWithUsage() {
-  console.error([
-    'Usage: mappings <command> [options]',
-    '',
-    'Commands:',
-    '  validate-file <file> [--json]',
-    '      Compile and validate a single mapping definition file.',
-    '',
-    '  compile <file> [--json]',
-    '      Compile a mapping definition and report compile errors.',
-    '',
-    '  run-file <file> --sources <sources.json> [--trace] [--json]',
-    '      Run a mapping definition file against the provided sources.',
-    '',
-    '  validate-dir <directory> [--json]',
-    '      Validate all *.json files in a directory (recursive).',
-    '',
-    '  list <directory>',
-    '      List all mapping IDs found in a directory.',
-    '',
-    'Options:',
-    '  --json    Machine-readable JSON output (for CI/CD integration)',
-    '  --trace   Include trace in run-file output',
-    '  --sources Path to sources JSON file (required for run-file)',
-  ].join('\n'));
-  process.exit(1);
-}
-
-// ---------------------------------------------------------------------------
-// Команды
-// ---------------------------------------------------------------------------
-
-switch (command) {
-
-  // validate-file: компилирует и сообщает о результате
-  case 'validate-file': {
-    const filePath = args[1];
-    const isJson = hasFlag(args, '--json');
-    if (!filePath) exitWithUsage();
-
-    let definition;
-    try { definition = readJSON(filePath); }
-    catch (e) {
-      fail({ status: 'MAPPING_ERROR', error: { code: 'PARSE_ERROR', message: e.message, phase: 'compile' } }, isJson);
-    }
-
-    const result = engine.validate(definition);
-    if (result.status === 'SUCCESS') {
-      output(result, isJson);
-      process.exit(0);
-    } else {
-      fail(result, isJson);
-    }
-    break;
-  }
-
-  // compile: явная команда компиляции
-  case 'compile': {
-    const filePath = args[1];
-    const isJson = hasFlag(args, '--json');
-    if (!filePath) exitWithUsage();
-
-    let definition;
-    try { definition = readJSON(filePath); }
-    catch (e) {
-      fail({ status: 'MAPPING_ERROR', error: { code: 'PARSE_ERROR', message: e.message, phase: 'compile' } }, isJson);
-    }
-
-    const result = compile(definition);
-    if (result.success) {
-      const out = { status: 'SUCCESS', mappingId: result.mapping.mappingId };
-      output(out, isJson);
-      process.exit(0);
-    } else {
-      fail({ status: 'MAPPING_ERROR', error: result.error }, isJson);
-    }
-    break;
-  }
-
-  // run-file: компилирует и исполняет
-  case 'run-file': {
-    const filePath = args[1];
-    const sourcesPath = findOption(args, '--sources');
-    const withTrace = hasFlag(args, '--trace');
-    const isJson = hasFlag(args, '--json');
-
-    if (!filePath || !sourcesPath) exitWithUsage();
-
-    let definition, sources;
-    try { definition = readJSON(filePath); }
-    catch (e) {
-      fail({ status: 'MAPPING_ERROR', error: { code: 'PARSE_ERROR', message: `mapping file: ${e.message}`, phase: 'compile' } }, isJson);
-    }
-    try { sources = readJSON(sourcesPath); }
-    catch (e) {
-      fail({ status: 'MAPPING_ERROR', error: { code: 'PARSE_ERROR', message: `sources file: ${e.message}`, phase: 'execute' } }, isJson);
-    }
-
-    const result = engine.run({ definition, sources, trace: withTrace });
-    if (result.status === 'SUCCESS') {
-      output(result, isJson);
-      process.exit(0);
-    } else {
-      fail(result, isJson);
-    }
-    break;
-  }
-
-  // validate-dir: проверяет все *.json с mappingId
-  case 'validate-dir': {
-    const dirPath = args[1];
-    const isJson = hasFlag(args, '--json');
-    if (!dirPath) exitWithUsage();
-
-    const files = findJsonFiles(dirPath);
-    if (files.length === 0) {
-      if (isJson) output({ status: 'SUCCESS', files: [], skipped: 0 }, true);
-      else console.log('No JSON files found.');
-      process.exit(0);
-    }
-
-    let allOk = true;
-    let skipped = 0;
-    const results = [];
-
-    for (const file of files) {
-      let definition;
-      try { definition = readJSON(file); }
-      catch (e) {
-        allOk = false;
-        results.push({ file, status: 'PARSE_ERROR', error: e.message });
-        if (!isJson) {
-          console.log(`ERR  ${file}`);
-          console.log(`     parse error: ${e.message}`);
-        }
-        continue;
-      }
-      // Пропускаем файлы без mappingId — они не являются сценариями маппинга
-      if (!definition || typeof definition.mappingId === 'undefined') {
-        skipped++;
-        continue;
-      }
-      const result = engine.validate(definition);
-      if (result.status === 'SUCCESS') {
-        results.push({ file, status: 'SUCCESS', mappingId: result.mappingId });
-        if (!isJson) console.log(`OK   ${file}`);
+async function commandCompile(filePath, options) {
+  const source = await readJsonFile(filePath);
+  try {
+    const artifact = prepareMappings(source);
+    const payload = {
+      ok: true,
+      artifact: {
+        type: artifact.type,
+        mappingId: artifact.mappingId,
+        version: artifact.version,
+      },
+    };
+    emit(options.json ? payload : `Prepared: ${artifact.mappingId ?? '<unknown>'}`, options.json);
+    return 0;
+  } catch (error) {
+    if (error instanceof MappingsCompileError) {
+      const payload = { ok: false, code: error.code, diagnostics: error.diagnostics };
+      if (options.json) {
+        emit(payload, true);
       } else {
-        allOk = false;
-        results.push({ file, status: 'MAPPING_ERROR', mappingId: result.mappingId, error: result.error });
-        if (!isJson) {
-          console.log(`ERR  ${file}`);
-          const e = result.error;
-          const parts = [`[${e.code}] ${e.message}`];
-          if (e.targetPath) parts.push(`target: ${e.targetPath}`);
-          console.log(`     ${parts.join('  ')}`);
-        }
+        console.error(formatMappingsDiagnostics(error.diagnostics));
+      }
+      return 2;
+    }
+    throw error;
+  }
+}
+
+async function commandRunFile(filePath, options) {
+  if (!options.sources) {
+    console.error('Missing required option: --sources <sources-file.json>');
+    return 1;
+  }
+  const source = await readJsonFile(filePath);
+  const sources = await readJsonFile(options.sources);
+  const artifact = prepareMappings(source);
+  const result = executeMappings(artifact, sources, {
+    trace: options.trace ?? false,
+  });
+  emit(options.json ? result : result.output, options.json);
+  return 0;
+}
+
+async function commandValidateDir(dirPath, options) {
+  const files = await walkJsonFiles(dirPath);
+  const checked = [];
+  const skipped = [];
+  let hasErrors = false;
+
+  for (const file of files) {
+    const value = await readJsonFile(file);
+    if (!isLikelyMappingSource(value)) {
+      skipped.push(file);
+      continue;
+    }
+    const result = validateMappings(value);
+    checked.push({
+      file,
+      mappingId: value.mappingId ?? null,
+      ok: result.ok,
+      diagnostics: result.diagnostics,
+    });
+    if (!result.ok) hasErrors = true;
+  }
+
+  const payload = {
+    ok: !hasErrors,
+    checkedCount: checked.length,
+    skippedCount: skipped.length,
+    checked,
+    skipped,
+  };
+
+  if (options.json) {
+    emit(payload, true);
+  } else {
+    for (const item of checked) {
+      console.log(`${item.ok ? 'OK' : 'ERROR'} ${item.mappingId ?? '<unknown>'} — ${item.file}`);
+      if (!item.ok) {
+        console.error(formatMappingsDiagnostics(item.diagnostics));
       }
     }
-    if (!isJson && skipped > 0) {
-      console.log(`     (${skipped} file(s) skipped — no mappingId field)`);
-    }
-    if (isJson) {
-      output({ allOk, skipped, results }, true);
-    }
-    process.exit(allOk ? 0 : 1);
-    break;
+    console.log(`Checked: ${checked.length}, skipped: ${skipped.length}`);
   }
 
-  // list: выводит mappingId → путь
-  case 'list': {
-    const dirPath = args[1];
-    if (!dirPath) exitWithUsage();
-
-    const files = findJsonFiles(dirPath);
-    if (files.length === 0) {
-      console.log('No JSON files found.');
-      process.exit(0);
-    }
-
-    for (const file of files) {
-      let definition;
-      try { definition = readJSON(file); }
-      catch (e) { console.log(`(parse error)\t${file}`); continue; }
-      const mappingId = (definition && typeof definition.mappingId === 'string')
-        ? definition.mappingId
-        : '(no mappingId)';
-      console.log(`${mappingId}\t${file}`);
-    }
-    break;
-  }
-
-  default:
-    exitWithUsage();
+  return hasErrors ? 2 : 0;
 }
+
+async function commandList(dirPath, options) {
+  const files = await walkJsonFiles(dirPath);
+  const items = [];
+  for (const file of files) {
+    const value = await readJsonFile(file);
+    if (!isLikelyMappingSource(value)) continue;
+    items.push({
+      mappingId: value.mappingId ?? null,
+      file,
+    });
+  }
+  if (options.json) {
+    emit(items, true);
+  } else {
+    for (const item of items) {
+      console.log(`${item.mappingId ?? '<unknown>'}\t${item.file}`);
+    }
+  }
+  return 0;
+}
+
+async function main() {
+  const options = parseOptions(process.argv.slice(2));
+  const [command, ...rest] = options._;
+
+  if (options.help) {
+    printUsage();
+    return;
+  }
+
+  if (!command) {
+    printUsage();
+    process.exit(1);
+  }
+
+  if (!['validate-file', 'compile', 'run-file', 'validate-dir', 'list'].includes(command)) {
+    const exitCode = await commandValidateFile(command, options);
+    process.exit(exitCode);
+  }
+
+  const target = rest[0];
+  if (!target) {
+    printUsage();
+    process.exit(1);
+  }
+
+  let exitCode = 0;
+  switch (command) {
+    case 'validate-file':
+      exitCode = await commandValidateFile(target, options);
+      break;
+    case 'compile':
+      exitCode = await commandCompile(target, options);
+      break;
+    case 'run-file':
+      exitCode = await commandRunFile(target, options);
+      break;
+    case 'validate-dir':
+      exitCode = await commandValidateDir(target, options);
+      break;
+    case 'list':
+      exitCode = await commandList(target, options);
+      break;
+    default:
+      printUsage();
+      exitCode = 1;
+      break;
+  }
+  process.exit(exitCode);
+}
+
+main().catch((error) => {
+  if (error instanceof MappingsCompileError) {
+    console.error(formatMappingsDiagnostics(error.diagnostics));
+    process.exit(2);
+  }
+  if (error instanceof MappingsRuntimeError) {
+    console.error(formatMappingsRuntimeError(error));
+    process.exit(2);
+  }
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(3);
+});

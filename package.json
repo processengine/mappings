@@ -1,39 +1,44 @@
 {
   "name": "@processengine/mappings",
-  "version": "1.0.1",
-  "description": "Declarative JSON mapping and normalization library for processengine",
-  "main": "src/index.js",
-  "types": "types/index.d.ts",
+  "version": "2.0.0",
+  "description": "Declarative JSON mappings runtime for ProcessEngine",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./schema/mapping-definition.v1.schema.json": "./schema/mapping-definition.v1.schema.json",
     "./package.json": "./package.json"
   },
   "bin": {
-    "mappings": "bin/mappings.js"
+    "mappings": "./bin/mappings.js"
   },
   "files": [
-    "CHANGELOG.md",
-    "LICENSE",
+    "dist/",
+    "schema/",
+    "bin/",
     "README.md",
     "README.ru.md",
+    "SPEC.md",
     "SPEC_RU.md",
-    "benchmarks/",
-    "bin/",
-    "docs/",
-    "schema/",
-    "src/",
-    "types/"
+    "COMPATIBILITY.md",
+    "MIGRATION.md",
+    "CHANGELOG.md",
+    "RELEASE_NOTES_2.0.0.md",
+    "LICENSE"
   ],
   "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "pretest": "npm run build",
     "test": "node --test test/*.test.js",
+    "test:pack": "node ./scripts/pack-install-test.mjs",
     "bench": "node benchmarks/run.mjs"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   },
   "keywords": [
     "json",
@@ -42,7 +47,6 @@
     "transformation",
     "declarative",
     "dsl",
-    "orchestration",
     "processengine"
   ],
   "license": "MIT",

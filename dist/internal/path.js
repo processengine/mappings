@@ -1,27 +1,13 @@
-'use strict';
-
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
-// ---------------------------------------------------------------------------
-// isPlainObject
-// ---------------------------------------------------------------------------
-
-/**
- * Возвращает true только для простых JSON-объектов: {} или Object.create(null).
- * Отвергает Date, Map, Set, экземпляры классов, массивы, null, примитивы.
- */
-function isPlainObject(val) {
+export function isPlainObject(val) {
   if (val === null || typeof val !== 'object') return false;
   if (Array.isArray(val)) return false;
   const proto = Object.getPrototypeOf(val);
   return proto === Object.prototype || proto === null;
 }
 
-// ---------------------------------------------------------------------------
-// Валидация синтаксиса пути к источнику
-// ---------------------------------------------------------------------------
-
-function validatePathSyntax(pathStr) {
+export function validatePathSyntax(pathStr) {
   if (!pathStr || typeof pathStr !== 'string') {
     return { valid: false, code: 'INVALID_PATH', message: 'Path must be a non-empty string' };
   }
@@ -46,11 +32,7 @@ function validatePathSyntax(pathStr) {
   return { valid: true };
 }
 
-// ---------------------------------------------------------------------------
-// Валидация синтаксиса целевого пути
-// ---------------------------------------------------------------------------
-
-function validateTargetPathSyntax(pathStr) {
+export function validateTargetPathSyntax(pathStr) {
   if (!pathStr || typeof pathStr !== 'string') {
     return { valid: false, code: 'INVALID_TARGET_PATH', message: 'Target path must be a non-empty string' };
   }
@@ -69,21 +51,7 @@ function validateTargetPathSyntax(pathStr) {
   return { valid: true };
 }
 
-// ---------------------------------------------------------------------------
-// Разрешение пути
-// ---------------------------------------------------------------------------
-
-/**
- * Разрешает исходный путь относительно переданного словаря источников.
- *
- * - Промежуточные узлы должны быть plain-объектами.
- * - null на промежуточном шаге → путь не разрешён.
- * - null на ПОСЛЕДНЕМ шаге → разрешён со значением null.
- * - Массивы и любые другие значения допустимы как конечный результат.
- *
- * Возвращает { resolved: true, value } или { resolved: false }.
- */
-function resolvePath(sourcesMap, pathStr) {
+export function resolvePath(sourcesMap, pathStr) {
   const segments = pathStr.split('.');
   const sourceName = segments[1];
 
@@ -121,11 +89,7 @@ function resolvePath(sourcesMap, pathStr) {
   return { resolved: true, value: current[lastKey] };
 }
 
-// ---------------------------------------------------------------------------
-// Запись по целевому пути
-// ---------------------------------------------------------------------------
-
-function setTargetPath(result, targetPath, value) {
+export function setTargetPath(result, targetPath, value) {
   const segments = targetPath.split('.');
   let current = result;
   for (let i = 0; i < segments.length - 1; i++) {
@@ -138,27 +102,11 @@ function setTargetPath(result, targetPath, value) {
   current[segments[segments.length - 1]] = value;
 }
 
-// ---------------------------------------------------------------------------
-// Глубокое копирование — безопасное, без скрытых преобразований
-// ---------------------------------------------------------------------------
-
-/**
- * Глубоко копирует значение для безопасного использования в результате.
- *
- * Контракт:
- * - Примитивы (string, number, boolean, null) возвращаются как есть.
- * - Plain-объекты и массивы рекурсивно копируются.
- * - Циклические ссылки → бросает TypeError (→ INTERNAL_ERROR в движке).
- * - Не-plain объекты (Date, Map, Set, экземпляры классов) → бросает TypeError.
- *
- * Гарантирует, что библиотека никогда не преобразует non-JSON значения скрыто
- * (например, JSON.parse/JSON.stringify превратит NaN→null, Date→string).
- */
-function deepCopy(value) {
-  return _deepCopyValue(value, new Set());
+export function deepCopy(value) {
+  return deepCopyValue(value, new Set());
 }
 
-function _deepCopyValue(value, seen) {
+function deepCopyValue(value, seen) {
   if (value === null || typeof value !== 'object') {
     return value;
   }
@@ -169,11 +117,11 @@ function _deepCopyValue(value, seen) {
 
   let result;
   if (Array.isArray(value)) {
-    result = value.map(item => _deepCopyValue(item, seen));
+    result = value.map((item) => deepCopyValue(item, seen));
   } else if (isPlainObject(value)) {
     result = {};
     for (const key of Object.keys(value)) {
-      result[key] = _deepCopyValue(value[key], seen);
+      result[key] = deepCopyValue(value[key], seen);
     }
   } else {
     const name = value.constructor ? value.constructor.name : typeof value;
@@ -184,64 +132,46 @@ function _deepCopyValue(value, seen) {
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Рекурсивная проверка JSON-безопасности содержимого источника
-// ---------------------------------------------------------------------------
-
-/**
- * Рекурсивно проверяет, что значение источника содержит только JSON-совместимые данные.
- *
- * Разрешены: null, string, конечное число, boolean, plain-объекты, массивы.
- * Запрещены: NaN, Infinity, -Infinity, BigInt, функции, Date, Map, Set,
- *            экземпляры классов, циклические ссылки, undefined.
- *
- * Возвращает { code: 'INVALID_SOURCE_CONTENT', message } или null при успехе.
- *
- * @param {*}      value      — проверяемое значение
- * @param {string} sourceName — имя источника для сообщений об ошибках
- * @param {string} [keyPath]  — точечный путь внутри источника (для сообщений)
- * @param {Set}    [seen]     — трекер циклических ссылок (внутренний)
- */
-function validateJsonSafeValue(value, sourceName, keyPath, seen) {
-  if (!seen) seen = new Set();
+export function validateJsonSafeValue(value, sourceName, keyPath, seen = new Set()) {
   const loc = keyPath ? ` at "${keyPath}"` : '';
 
   if (value === null) return null;
 
   const type = typeof value;
-
   if (type === 'string' || type === 'boolean') return null;
-
   if (type === 'number') {
     if (!Number.isFinite(value)) {
       const display = Number.isNaN(value) ? 'NaN' : (value > 0 ? 'Infinity' : '-Infinity');
       return {
         code: 'INVALID_SOURCE_CONTENT',
+        level: 'error',
         message: `Source '${sourceName}' contains non-JSON-safe number (${display})${loc}`,
+        path: keyPath ? `sources.${sourceName}.${keyPath}` : `sources.${sourceName}`,
       };
     }
     return null;
   }
 
   if (type !== 'object') {
-    // function, symbol, bigint, undefined
     return {
       code: 'INVALID_SOURCE_CONTENT',
+      level: 'error',
       message: `Source '${sourceName}' contains non-JSON-safe value (${type})${loc}`,
+      path: keyPath ? `sources.${sourceName}.${keyPath}` : `sources.${sourceName}`,
     };
   }
 
-  // Объект — сначала проверяем циклическую ссылку
   if (seen.has(value)) {
     return {
       code: 'INVALID_SOURCE_CONTENT',
+      level: 'error',
       message: `Source '${sourceName}' contains a circular reference${loc}`,
+      path: keyPath ? `sources.${sourceName}.${keyPath}` : `sources.${sourceName}`,
     };
   }
   seen.add(value);
 
   let err = null;
-
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
       const childPath = keyPath ? `${keyPath}[${i}]` : `[${i}]`;
@@ -258,20 +188,12 @@ function validateJsonSafeValue(value, sourceName, keyPath, seen) {
     const name = value.constructor ? value.constructor.name : 'unknown';
     err = {
       code: 'INVALID_SOURCE_CONTENT',
+      level: 'error',
       message: `Source '${sourceName}' contains non-JSON-compatible object (${name})${loc}`,
+      path: keyPath ? `sources.${sourceName}.${keyPath}` : `sources.${sourceName}`,
     };
   }
 
   seen.delete(value);
   return err;
 }
-
-module.exports = {
-  isPlainObject,
-  validatePathSyntax,
-  validateTargetPathSyntax,
-  resolvePath,
-  setTargetPath,
-  deepCopy,
-  validateJsonSafeValue,
-};
