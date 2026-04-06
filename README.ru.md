@@ -1,21 +1,22 @@
 # @processengine/mappings
 
-[![CI](https://github.com/processengine/mappings/actions/workflows/ci.yml/badge.svg)](https://github.com/processengine/mappings/actions)
-[![npm](https://img.shields.io/npm/v/@processengine/mappings)](https://www.npmjs.com/package/@processengine/mappings)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node 18+](https://img.shields.io/badge/Node-18%2B-green)](https://nodejs.org/)
+Декларативная библиотека преобразования JSON-данных для семейства ProcessEngine.
 
-Декларативная библиотека трансформации и нормализации JSON-данных.
+`@processengine/mappings` — это слой нормализации и преобразования данных. Он один раз подготавливает mapping-артефакт и затем многократно исполняет его на входных данных времени выполнения.
 
-Позволяет описать по конфигурации, как из одного или нескольких JSON-объектов собрать новый JSON и привести значения к каноническому виду. Без прикладного кода.
+## Публичный API
 
-## Место в экосистеме processengine
+Канонический публичный API:
 
-```text
-@processengine/mappings    → собрать и нормализовать данные для следующего шага
-@processengine/rules       → применить правила к нормализованным данным
-@processengine/decisions   → принять решение по сценарию
-```
+- `validateMappings(source, options?)`
+- `prepareMappings(source, options?)`
+- `executeMappings(artifact, input, options?)`
+- `MappingsCompileError`
+- `MappingsRuntimeError`
+- `formatMappingsDiagnostics(...)`
+- `formatMappingsRuntimeError(...)`
+
+Legacy API вроде `MappingEngine` и старого `compile()` наружу больше не публикуется.
 
 ## Установка
 
@@ -23,194 +24,80 @@
 npm install @processengine/mappings
 ```
 
-Требуется Node.js >= 18.
+Минимальная версия Node.js: `>=20.19.0`.
 
 ## Быстрый старт
 
 ```js
-const { MappingEngine } = require("@processengine/mappings");
+import {
+  validateMappings,
+  prepareMappings,
+  executeMappings,
+} from '@processengine/mappings';
 
-const engine = new MappingEngine();
-
-const definition = {
-  mappingId: "client.normalize.v1",
-  sources: { raw: "object" },
+const source = {
+  mappingId: 'person.normalize.v1',
+  sources: { input: 'object' },
   output: {
-    "client.phone": { removeNonDigits: "sources.raw.phone" },
-    "client.email": { lowercase: "sources.raw.email" },
-    "client.name": { normalizeSpaces: "sources.raw.fullName" },
-    "client.gender": {
-      transform: {
-        from: "sources.raw.gender",
-        steps: [
-          { trim: true },
-          { uppercase: true },
-          {
-            mapValue: {
-              map: { М: "MALE", M: "MALE", Ж: "FEMALE", F: "FEMALE" },
-              fallback: null,
-            },
-          },
-        ],
-      },
-    },
-    "client.currency": {
-      mapValue: {
-        from: "sources.raw.currencyCode",
-        map: { RUR: "RUB", 643: "RUB", 840: "USD" },
-        fallback: "passthrough",
-      },
-    },
+    'person.name': { trim: 'sources.input.name' },
+    'person.hasInn': { exists: 'sources.input.inn' },
   },
 };
 
-const result = engine.run({
-  definition,
-  sources: {
-    raw: {
-      phone: "+7 (999) 111-22-33",
-      email: "CUSTOMER@EXAMPLE.COM",
-      fullName: "  Иван   Иванов  ",
-      gender: " m ",
-      currencyCode: "RUR",
-    },
-  },
-});
+const validation = validateMappings(source);
+if (!validation.ok) {
+  throw new Error('Некорректный mapping source');
+}
 
-console.log(result);
-// {
-//   status: 'SUCCESS',
-//   mappingId: 'client.normalize.v1',
-//   result: {
-//     client: {
-//       phone:    '79991112233',
-//       email:    'customer@example.com',
-//       name:     'Иван Иванов',
-//       gender:   'MALE',
-//       currency: 'RUB',
-//     }
-//   }
-// }
+const artifact = prepareMappings(source);
+const result = executeMappings(artifact, {
+  input: { name: '  Alice  ', inn: '1234567890' },
+}, { trace: 'basic' });
+
+console.log(result.output);
 ```
 
-## Операторы
+## Runtime-контракт
 
-### Структурный маппинг
-
-| Оператор   | Что делает                                                   |
-| ---------- | ------------------------------------------------------------ |
-| `from`     | Копирует значение из источника по пути                       |
-| `literal`  | Вставляет константу                                          |
-| `exists`   | Проверяет наличие не-null значения → boolean                 |
-| `equals`   | Строгое сравнение (`===`) с литералом → boolean              |
-| `coalesce` | Первое не-null значение из 1–4 кандидатов (path или literal) |
-
-### Форматная нормализация
-
-| Оператор          | Что делает                             |
-| ----------------- | -------------------------------------- |
-| `trim`            | Убирает ведущие и хвостовые пробелы    |
-| `lowercase`       | Приводит к нижнему регистру            |
-| `uppercase`       | Приводит к верхнему регистру           |
-| `normalizeSpaces` | Trim + схлопывание внутренних пробелов |
-| `removeNonDigits` | Оставляет только цифры `[0-9]`         |
-
-Все строковые операторы: поле не создаётся, если значение не является строкой, равно null или путь не разрешился. Исключение: `removeNonDigits` создаёт пустую строку `""`, если после фильтрации ничего не осталось.
-
-### Словарная канонизация: `mapValue`
+`executeMappings(...)` возвращает стабильный success result:
 
 ```js
-// Корневая форма
-'payment.currency': {
-  mapValue: {
-    from:     'sources.req.currencyCode',
-    map:      { RUR: 'RUB', '643': 'RUB', '840': 'USD' },
-    fallback: 'passthrough',   // или null, литерал, или отсутствует
-  }
+{
+  output: { ... },
+  trace: [ ... ] // опционально
 }
 ```
 
-`mapValue` не выполняет неявного приведения типов: число `643` и строка `"643"` — разные значения.
+Ошибки compile/runtime-фазы отдаются через typed errors:
 
-Варианты `fallback`:
+- `MappingsCompileError`
+- `MappingsRuntimeError`
 
-- отсутствует — поле не создаётся
-- `null` — поле создаётся со значением null
-- JSON-safe literal — поле создаётся с этим значением
-- `"passthrough"` — поле создаётся с исходным значением
+## Trace
 
-### Цепочка преобразований: `transform`
+Поддерживаются режимы:
 
-Используется, когда нужно два и более шага. Самостоятельный оператор, не комбинируется с другими.
+- `false`
+- `'basic'`
+- `'verbose'`
 
-```js
-'client.gender': {
-  transform: {
-    from: 'sources.raw.gender',
-    steps: [
-      { trim:      true },
-      { uppercase: true },
-      { mapValue: { map: { М: 'MALE', M: 'MALE', Ж: 'FEMALE', F: 'FEMALE' }, fallback: null } },
-    ],
-  },
-}
-```
+`basic` даёт компактную и безопасную трассировку.
+`verbose` может включать redacted-фрагменты входа и результата. Для управления маскированием используйте `redact`.
 
-Допустимые шаги: `trim`, `lowercase`, `uppercase`, `normalizeSpaces`, `removeNonDigits` (аргумент `true`), `mapValue` (шаговая форма без `from`). Минимум 2 шага, максимум 8.
+## Форма поставки
 
-Цепочка прерывается при первом шаге, который не может создать значение (не-строка на входе, ненайденный ключ без fallback).
+Пакет публикуется как:
 
-## Трассировка
+- ESM-first
+- dist-only runtime
+- явные `exports`
+- с типами `.d.ts`
 
-```js
-const result = engine.run({ definition, sources, trace: true });
-// result.trace — массив записей по каждому полю output
-```
+Установленный пакет не исполняет файлы из `src/`.
 
-Каждая запись содержит `target`, `op`, `outputCreated`, `outputValue`. Для `transform` — массив `steps`, при обрыве цепочки — поля `stoppedChain` и `reason` на сломавшемся шаге.
+## Документация
 
-## CLI
-
-```bash
-# Проверить файл сценария
-mappings validate-file examples/mappings/client/normalize_client_data.v1.json
-
-# Исполнить сценарий
-mappings run-file examples/mappings/client/normalize_client_data.v1.json \
-  --sources examples/sources/client_raw.json \
-  --trace
-
-# Проверить все сценарии в директории
-mappings validate-dir examples/mappings
-
-# Список сценариев
-mappings list examples/mappings
-```
-
-## Модель ошибок
-
-Все методы возвращают `MappingResult` и никогда не бросают исключения.
-
-```js
-// Успех
-{ status: 'SUCCESS', mappingId: '...', result: { ... } }
-
-// Ошибка
-{ status: 'MAPPING_ERROR', mappingId: '...', error: { code: '...', message: '...' } }
-```
-
-Коды ошибок конфигурации: `INVALID_MAPPING_SCHEMA`, `INVALID_MAPPING_ID`, `UNKNOWN_OPERATOR`, `INVALID_ARGS`, `INVALID_SOURCE_DECLARATION`, `INVALID_PATH`, `INVALID_TARGET_PATH`, `CONFLICTING_TARGET_PATHS`.
-
-Коды ошибок выполнения: `MISSING_SOURCE`, `INVALID_SOURCE_TYPE`, `INVALID_SOURCE_CONTENT`, `INTERNAL_ERROR`.
-
-## Границы библиотеки
-
-Библиотека не содержит и не будет содержать:
-
-- условных операторов (`if`/`else`)
-- арифметики
-- регулярных выражений
-- контекстно-зависимых словарей
-- предметной интерпретации данных
-
-Подробнее: [SPEC_RU.md](SPEC_RU.md).
+- [SPEC.md](./SPEC.md)
+- [SPEC_RU.md](./SPEC_RU.md)
+- [COMPATIBILITY.md](./COMPATIBILITY.md)
+- [MIGRATION.md](./MIGRATION.md)
