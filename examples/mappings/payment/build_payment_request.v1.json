@@ -1,17 +1,17 @@
 {
-  "mappingId": "payment.build_payment_request.v1",
+  "mappingId": "request.build_checkout_payload.v1",
   "sources": {
-    "order":   "object",
-    "payment": "object"
+    "order": "object",
+    "channel": "object"
   },
   "output": {
-    "request.orderId":        { "from":   "sources.order.id" },
-    "request.amount":         { "from":   "sources.order.total.amount" },
-    "request.currency":       { "from":   "sources.order.total.currency" },
-    "request.customerEmail":  { "from":   "sources.order.customer.email" },
-    "request.paymentMethod":  { "from":   "sources.payment.method" },
-    "flags.isCard":           { "equals": ["sources.payment.method", "card"] },
-    "flags.hasCustomerEmail": { "exists": "sources.order.customer.email" },
-    "meta.mappingId":         { "literal": "payment.build_payment_request.v1" }
+    "request.orderId": { "from": "sources.order.id" },
+    "request.amount": { "from": "sources.order.total.amount" },
+    "request.currency": { "from": "sources.order.total.currency" },
+    "request.contactEmail": { "from": "sources.order.contact.email" },
+    "request.channel": { "from": "sources.channel.name" },
+    "flags.isOnline": { "equals": ["sources.channel.name", "online"] },
+    "flags.hasContactEmail": { "exists": "sources.order.contact.email" },
+    "meta.mappingId": { "literal": "request.build_checkout_payload.v1" }
   }
 }

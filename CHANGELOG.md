@@ -1,38 +1,71 @@
 # Changelog
 
-Формат: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
-Версионирование: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).  
-Политика совместимости: [COMPATIBILITY.md](COMPATIBILITY.md).
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
+Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).  
+Compatibility policy: [COMPATIBILITY.md](COMPATIBILITY.md).
+
+---
+
+## [2.0.1] — 2026-04-06
+
+Documentation and examples release for the canonical `2.x` line.
+
+### Added
+
+- Substantially expanded `README.md` and `README.ru.md` as full entry points into the library.
+- Substantially expanded `SPEC.md` and `SPEC_RU.md` into normative library specifications.
+- Repository examples covering:
+  - basic transformation;
+  - validate + diagnostics;
+  - runtime error;
+  - trace basic;
+  - trace verbose;
+  - prepared artifact usage;
+  - use as a ProcessEngine boundary;
+  - limitations and non-goals.
+- Documentation badge block in README for npm version, CI status, Node requirement, and license.
+- `RELEASE_NOTES_2.0.1.md` for the documentation maturity release.
+
+### Changed
+
+- Documentation terminology aligned across README, specification, migration guide, compatibility notes, changelog, and release notes.
+- Documentation examples rewritten to be neutral library examples rather than project-specific examples.
+- English and Russian documentation brought to the same semantic depth.
+
+### Notes
+
+- This release does not change package shape, canonical API, or runtime model.
+- The `2.0.0` release remains the first public canonical API release.
 
 ---
 
 ## [2.0.0] — 2026-04-06
 
-Первый публичный релиз новой канонической линии `@processengine/mappings`.
+First public release of the canonical `@processengine/mappings` line.
 
-### Изменено
+### Changed
 
-- Публичный API приведён к канону семейства ProcessEngine: наружу публикуются `validateMappings(...)`, `prepareMappings(...)` и `executeMappings(...)`.
-- Legacy API удалён из публичных exports: `MappingEngine`, старый `compile(...)` и смешанные runtime entrypoint'ы больше не являются частью продуктового контракта.
-- Библиотека переведена на `ESM-first` и `dist-only` поставку с явными exports и Node.js `>=20.19.0`.
-- `executeMappings(...)` теперь принимает только prepared artifact и не выполняет скрытую compile-фазу.
-- Prepared artifact оформлен как минимально публичная, opaque-ish сущность исполнения без лишних обещаний по структуре.
+- Public API aligned with the ProcessEngine canon: `validateMappings(...)`, `prepareMappings(...)`, and `executeMappings(...)` are the normative public entrypoints.
+- Legacy API removed from public exports: `MappingEngine`, public `compile(...)`, and mixed runtime entrypoints are no longer part of the product contract.
+- Package moved to `ESM-first`, `dist-only`, explicit exports, and Node.js `>=20.19.0`.
+- `executeMappings(...)` now accepts only a prepared artifact and does not perform hidden compile work.
+- Prepared artifact formalized as a minimal public, opaque-ish runtime entity.
 
-### Добавлено
+### Added
 
-- `MappingsCompileError` и `MappingsRuntimeError` как typed errors канонической compile/runtime модели.
-- `formatMappingsDiagnostics(...)` и `formatMappingsRuntimeError(...)` для CLI, логов и отладочных сценариев.
-- Канонический trace с режимами `false | "basic" | "verbose"` и базовой redaction model.
-- `MIGRATION.md` как маршрут перехода со старого публичного API на канонический путь.
-- Contract tests, trace tests, pack/install tests и regression coverage старой семантики через новый API.
+- `MappingsCompileError` and `MappingsRuntimeError` as typed compile/runtime errors.
+- `formatMappingsDiagnostics(...)` and `formatMappingsRuntimeError(...)` for CLI, logs, and debugging.
+- Canonical trace with `false | "basic" | "verbose"` and basic redaction support.
+- `MIGRATION.md` as the migration route from the old public API.
+- Contract tests, trace tests, pack/install tests, and regression coverage through the canonical API.
 
-### Документация
+### Documentation
 
-- README, спецификации, compatibility notes и migration guide переписаны под каноническую форму библиотеки.
-- Исправлены устаревшие ссылки и релизная терминология перед публичной публикацией `2.0.0`.
+- README, specifications, compatibility notes, and migration guide rewritten for the canonical library form.
 
 ---
 
-## До релиза 2.0.0
+## Before 2.0.0
 
-Ранее библиотека существовала во внутренней доканонической линии с API вокруг `MappingEngine` и `compile(...)`. Публичным стартом новой канонической линии считается именно релиз `2.0.0`.
+Before `2.0.0`, the library existed in a pre-canonical internal line built around `MappingEngine` and public `compile(...)`.
+The public canonical release line starts at `2.0.0`.

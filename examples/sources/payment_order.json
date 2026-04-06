@@ -1,10 +1,10 @@
 {
   "order": {
     "id": "ORD-20250401-001",
-    "total": { "amount": 5000, "currency": "RUB" },
-    "customer": { "email": "customer@example.com" }
+    "total": { "amount": 5000, "currency": "EUR" },
+    "contact": { "email": "owner@example.com" }
   },
-  "payment": {
-    "method": "card"
+  "channel": {
+    "name": "online"
   }
 }
