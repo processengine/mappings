@@ -1,42 +1,58 @@
 # SPEC: @processengine/mappings
 
-## 1. Purpose of the library
+## What is normative in this document
 
-`@processengine/mappings` is the ProcessEngine runtime for declarative data transformation and normalization.
+This document normatively defines:
+- the library role inside ProcessEngine;
+- the public lifecycle `validate -> prepare -> execute`;
+- source artifact shape and operator semantics;
+- prepared artifact contract at the public level;
+- runtime result contract;
+- diagnostics, runtime errors, and trace semantics;
+- first-version array DSL boundaries.
 
-The library is intended to:
-- transform raw input into a normalized output structure;
-- keep transformation logic outside surrounding service code;
-- prepare compact derived data for the next layer in a process;
-- provide a stable `validate -> prepare -> execute` lifecycle for mapping artifacts.
+Internal compiled structures, optimizer details, and private helper modules are intentionally internal.
 
-The library is not intended to:
-- express arbitrary procedural logic;
-- perform stateful processing;
-- perform external I/O;
-- replace explicit code where algorithmic behavior is the real source of complexity.
+## 1. Library role
 
-In a larger ProcessEngine flow, `mappings` acts as a transformation boundary between input data and the next consumer of normalized output.
+`@processengine/mappings` is the ProcessEngine family library for declarative normalization and compact fact construction.
 
-## 2. Source model
+It is responsible for:
+- reading JSON-safe runtime sources;
+- applying explicit transformation rules;
+- building JSON-safe output;
+- staying transport-safe for downstream handoff.
 
-### 2.1. What counts as source
+It is not responsible for:
+- orchestration;
+- decision routing;
+- side effects;
+- arbitrary procedural logic.
 
-A mapping source is a declarative JSON object describing:
-- the mapping identifier;
-- the declared runtime sources accepted by execution;
-- the output structure to be produced;
-- the operator used for each output target.
+## 2. Canonical lifecycle
 
-### 2.2. Top-level source shape
+### `validateMappings(source)`
 
-The v1 source shape is:
+- performs soft validation;
+- returns `{ ok, diagnostics }`;
+- does not throw for ordinary source problems.
 
-- `mappingId: string`
-- `sources: Record<string, 'object'>`
-- `output: Record<TargetPath, OperatorDefinition>`
+### `prepareMappings(source)`
 
-Minimal example:
+- validates source;
+- compiles a prepared artifact;
+- throws `MappingsCompileError` on blocking validation failure.
+
+### `executeMappings(artifact, input, options?)`
+
+- executes only a prepared artifact;
+- does not perform hidden compile work;
+- returns `{ output, trace? }` on success;
+- throws `MappingsRuntimeError` on runtime failures.
+
+## 3. Source artifact model
+
+Normative top-level source shape:
 
 ```json
 {
@@ -45,42 +61,48 @@ Minimal example:
     "raw": "object"
   },
   "output": {
-    "profile.name": { "normalizeSpaces": "sources.raw.fullName" },
-    "profile.hasTags": { "exists": "sources.raw.tags" }
+    "profile.name": { "normalizeSpaces": "sources.raw.fullName" }
   }
 }
 ```
 
-### 2.3. Required parts
+Required top-level fields:
+- `mappingId: string`
+- `sources: Record<string, 'object'>`
+- `output: Record<TargetPath, Rule>`
 
-A valid source must contain:
-- a non-empty `mappingId` string;
-- a non-empty plain-object `sources` declaration;
-- a non-empty plain-object `output` declaration.
+## 4. Path semantics
 
-### 2.4. Source declarations
+### Source paths
 
-In v1, declared sources are intentionally small in scope.
+- must start with `sources.`;
+- must reference a declared source;
+- must not contain forbidden prototype segments;
+- numeric indexes are not supported;
+- wildcard `[*]` is not allowed in ordinary source paths.
 
-Each declared source name maps to the declaration `'object'`.
-This means runtime input is expected to be a plain object per declared source.
+### Aggregate `from`
 
-Example:
+For array DSL only, `from` may use exactly one wildcard `[*]` and it must be the last segment.
 
-```json
-{
-  "sources": {
-    "raw": "object",
-    "meta": "object"
-  }
-}
-```
+Allowed:
+- `sources.rules.issues[*]`
 
-### 2.5. Output rules
+Forbidden:
+- `sources.rules[*].issues`
+- `sources.rules.issues[*].code`
+- `sources.rules.issues[*].details[*]`
 
-Each `output` entry uses exactly one root operator.
+### Target paths
 
-Supported root operators in v1:
+- must be non-empty strings;
+- must not use numeric indexes;
+- conflicting target paths like `facts.a` and `facts.a.b` are compile errors.
+
+## 5. Built-in operators
+
+### Scalar / object operators
+
 - `from`
 - `literal`
 - `exists`
@@ -94,150 +116,164 @@ Supported root operators in v1:
 - `mapValue`
 - `transform`
 
-### 2.6. Path rules
+These preserve the canonical 2.0.x semantics.
 
-Source paths:
-- must be strings;
-- must start with `sources.`;
-- must reference a declared source name;
-- must not contain forbidden prototype-related segments;
-- must not use numeric array-index path segments in v1.
+## 6. Limited array DSL in 2.1.x
 
-Target paths:
-- must be non-empty strings;
-- must not contain forbidden prototype-related segments;
-- must not use numeric array-index path segments in v1.
+### Purpose
 
-### 2.7. Structural limitations of source
+The first array DSL version is intentionally small. It exists to build compact facts from multiplicity without moving interpretation back into service code.
 
-The source model is intentionally constrained.
+### Supported aggregate operators
 
-In particular, v1 does not aim to model:
-- arbitrary branching logic;
-- loops;
-- side effects;
-- external calls;
-- custom executable code inside source.
+- `collect`
+- `count`
+- `existsAny`
+- `existsAll`
+- `pickFirst`
 
-## 3. Compile semantics
+### Supported simple comparators
 
-### 3.1. `validateMappings(source, options?)`
+- `equals`
+- `in`
+- `startsWith`
 
-`validateMappings(...)` performs soft validation.
+### Shared aggregate model
 
-Its role is to:
-- inspect the source shape;
-- validate declared paths and operators;
-- validate operator arguments;
-- return structured diagnostics;
-- avoid throwing only because the source is invalid.
+Aggregate operators work with:
+- `from` — required source array selector
+- `where` — optional filter over each current element
+- `match` — additional predicate, used by `existsAll`
+- `value` — value selector, required by `collect`
 
-Result shape:
+`field` and `value` paths are relative to the current selected element.
 
-```js
+### `collect`
+
+Collects values from selected elements.
+
+```json
 {
-  ok: boolean,
-  diagnostics: MappingDiagnostic[]
+  "facts.errorCodes": {
+    "collect": {
+      "from": "sources.rules.issues[*]",
+      "where": { "field": "level", "equals": "ERROR" },
+      "value": "code"
+    }
+  }
 }
 ```
 
-### 3.2. `prepareMappings(source, options?)`
+Semantics:
+- preserves source order;
+- unresolved `value` skips the element;
+- skipped elements are reflected in trace as `droppedCount`.
 
-`prepareMappings(...)` is the canonical production entrypoint for preparation.
+### `count`
 
-Its role is to:
-- validate the source;
-- reject invalid source with a typed compile error;
-- return a prepared runtime artifact on success.
+Counts selected elements.
 
-### 3.3. What is validated in compile phase
+```json
+{
+  "facts.errorCount": {
+    "count": {
+      "from": "sources.rules.issues[*]",
+      "where": { "field": "level", "equals": "ERROR" }
+    }
+  }
+}
+```
 
-Compile-phase validation covers, at minimum:
-- top-level source structure;
-- presence and type of `mappingId`, `sources`, and `output`;
-- source declaration consistency;
-- source-path syntax;
-- target-path syntax;
+### `existsAny`
+
+Returns `true` if at least one selected element exists.
+
+### `existsAll`
+
+Returns `true` if all selected elements satisfy `match`.
+
+```json
+{
+  "facts.allErrorsInContacts": {
+    "existsAll": {
+      "from": "sources.rules.issues[*]",
+      "where": { "field": "level", "equals": "ERROR" },
+      "match": { "field": "field", "startsWith": "beneficiary.contacts." }
+    }
+  }
+}
+```
+
+### `pickFirst`
+
+Returns the first selected element or `null`.
+
+```json
+{
+  "facts.foundClient": {
+    "pickFirst": {
+      "from": "sources.findClient.clients[*]"
+    }
+  }
+}
+```
+
+This is intentionally not a general indexing feature. It is a deterministic aggregate selection operator.
+
+## 7. Boundary cases
+
+- `collect([]) -> []`
+- `count([]) -> 0`
+- `existsAny([]) -> false`
+- `existsAll([]) -> true`
+- `pickFirst([]) -> null`
+
+`existsAll([])` is vacuous truth. Safe business usage usually pairs it with a count fact.
+
+Condition semantics:
+- missing field in `where` -> element does not enter selection;
+- missing field in `match` -> predicate is `false`;
+- `startsWith` on non-string -> `false`;
+- empty `in` array is a validation warning `EMPTY_IN_ARRAY`.
+
+## 8. Compile semantics
+
+Compile validation covers:
+- top-level source shape;
+- path syntax and declared sources;
+- conflicting target paths;
 - supported operator set;
 - operator argument shape;
-- transform-step constraints;
-- JSON-safe literal constraints where applicable.
+- aggregate wildcard constraints;
+- aggregate condition shape.
 
-### 3.4. Compile failure
+`prepareMappings(...)` produces prepared artifact `v2` with compiled execution plan.
 
-A compile failure is any source condition that prevents creation of a prepared artifact.
+## 9. Prepared artifact contract
 
-Examples include:
-- missing required top-level fields;
-- undeclared source references;
-- invalid source path syntax;
-- invalid target path syntax;
-- unsupported operators;
-- malformed operator arguments.
+Public guarantees:
+- `type === 'mapping'`
+- `mappingId` is stable
+- `version` is present
+- artifact is immutable from consumer perspective
+- artifact is accepted by `executeMappings(...)`
 
-### 3.5. Difference between validate and prepare
+Artifact versions:
+- `v1` — legacy execution compatibility path
+- `v2` — compiled execution plan
 
-`validateMappings(...)` returns diagnostics without throwing on invalid source.
-`prepareMappings(...)` enforces the same compile rules, but on failure throws `MappingsCompileError` instead of returning a success-path artifact.
+The internal compiled plan is intentionally not a public contract.
 
-## 4. Prepared artifact contract
+## 10. Runtime input
 
-A mappings artifact is the prepared runtime entity returned by `prepareMappings(...)`.
+Runtime input must be a plain object keyed by declared source names.
+Each declared source must be present and must itself be a plain JSON-safe object.
 
-Publicly, the artifact is intentionally minimal.
+Non-JSON-safe source content is a runtime error.
 
-The library guarantees only that:
-- it is a prepared mappings artifact;
-- it exposes stable minimal identity fields documented in the public types;
-- it is suitable as input to `executeMappings(...)`;
-- it behaves as immutable from the consumer perspective.
+## 11. Runtime result contract
 
-The artifact should be treated as intentionally opaque-ish.
-
-Consumers should not assume that the artifact is:
-- a rich external serialization format;
-- a stable internal AST contract;
-- a public place for compile internals beyond documented minimal fields.
-
-The artifact is a runtime boundary, not a broad schema for external storage.
-
-## 5. Runtime semantics
-
-### 5.1. `executeMappings(artifact, input, options?)`
-
-`executeMappings(...)` is the canonical runtime entrypoint.
-
-It:
-- accepts only a prepared artifact;
-- accepts runtime input keyed by declared source names;
-- does not perform hidden compile or prepare work;
-- produces success output and optional trace;
-- throws `MappingsRuntimeError` on runtime failure.
-
-### 5.2. Runtime input
-
-Runtime input must be a plain object whose keys match declared source names.
-Each declared source must be present and must hold a plain object.
-
-Source content is expected to be JSON-safe.
-Non-JSON-safe values, circular references, and unsupported object types may cause runtime failure.
-
-### 5.3. Success path
-
-On successful execution, the library returns transformed output.
-If trace is enabled, trace is returned alongside output.
-
-### 5.4. Runtime failure
-
-Runtime failure covers execution-time conditions such as:
-- invalid artifact passed to `executeMappings(...)`;
-- missing declared source in runtime input;
-- invalid runtime source type;
-- invalid runtime source content.
-
-## 6. Runtime result contract
-
-Successful execution returns:
+Success result shape:
 
 ```js
 {
@@ -246,142 +282,72 @@ Successful execution returns:
 }
 ```
 
-Normative fields:
-- `output`
-- `trace?`
+The runtime result is transport-safe / JSON-safe by normative shape and is suitable for direct downstream handoff inside the ProcessEngine family.
 
-Important constraints:
-- this result is not a `status/envelope` object;
-- compile diagnostics are not mixed into the success result;
-- runtime errors are not returned as part of the success result.
+## 12. Diagnostics and runtime errors
 
-## 7. Diagnostics and errors
+### Validation diagnostics
 
-### 7.1. Diagnostics shape
+Shape:
 
-Compile diagnostics are structured objects with this shape:
+```js
+{
+  code: string,
+  level: 'error' | 'warning' | 'info',
+  message: string,
+  path?: string,
+  details?: Record<string, unknown>
+}
+```
 
-- `code: string`
-- `level: 'error' | 'warning' | 'info'`
-- `message: string`
-- `path?: string`
-- `details?: Record<string, unknown>`
+Representative diagnostics:
+- `INVALID_MAPPING_ID`
+- `INVALID_SOURCE_DECLARATION`
+- `INVALID_MAPPING_SCHEMA`
+- `UNKNOWN_OPERATOR`
+- `INVALID_ARGS`
+- `CONFLICTING_TARGET_PATHS`
+- `INVALID_WILDCARD_USAGE`
+- `INVALID_CONDITION_SHAPE`
+- `MISSING_VALUE_IN_COLLECT`
+- `EMPTY_IN_ARRAY`
 
-Diagnostics are intended to be machine-readable.
-Formatter functions are convenience helpers for CLI, logs, and developer-facing output.
+### Runtime errors
 
-### 7.2. `MappingsCompileError`
+Runtime failures are surfaced through `MappingsRuntimeError`.
+Representative runtime codes:
+- `INVALID_ARTIFACT`
+- `INVALID_SOURCE_TYPE`
+- `MISSING_SOURCE`
+- `INVALID_SOURCE_CONTENT`
 
-`MappingsCompileError` is thrown by `prepareMappings(...)` when the source cannot be prepared.
+## 13. Trace semantics
 
-It contains:
-- `code`
-- `message`
-- `diagnostics`
-- optional `cause`
-
-### 7.3. `MappingsRuntimeError`
-
-`MappingsRuntimeError` is thrown by `executeMappings(...)` when execution cannot proceed or runtime input is invalid.
-
-It contains:
-- `code`
-- `message`
-- optional `details`
-- optional `cause`
-
-### 7.4. Formatter helpers
-
-The library provides:
-- `formatMappingsDiagnostics(...)`
-- `formatMappingsRuntimeError(...)`
-
-These helpers do not replace structured diagnostics and errors. They format them for presentation.
-
-## 8. Trace semantics
-
-Supported trace modes:
+Supported trace levels:
 - `false`
-- `basic`
-- `verbose`
+- `'basic'`
+- `'verbose'`
 
-### 8.1. `false`
+`basic` is compact.
+`verbose` may include redacted samples and output fragments.
 
-No trace is returned.
+Array DSL trace uses one event per aggregate rule and may include:
+- `operator`
+- `from`
+- `selectedCount`
+- `resultType`
+- `resultValue`
+- `resultLength`
+- `droppedCount`
+- `picked`
 
-### 8.2. `basic`
+## 14. Explicit limits of first version
 
-`basic` is intended for compact and safer operational visibility.
-
-The expectation is:
-- execution events are present;
-- raw values are not exposed more than needed;
-- the trace is useful without becoming a full data dump.
-
-### 8.3. `verbose`
-
-`verbose` may include additional redacted input and output fragments useful for debugging, local analysis, and tests.
-
-`verbose` is broader than `basic`, but it is still not promised to be a perfect dump of the entire runtime state.
-
-### 8.4. Redaction model
-
-The trace API supports a redaction control hook via `options.redact`.
-
-This exists to let host applications:
-- mask values before they appear in trace;
-- avoid accidental leakage of sensitive payload fragments;
-- tailor trace output to operational safety requirements.
-
-## 9. Conflict semantics and limitations
-
-### 9.1. Output assembly semantics
-
-Output is assembled by applying rules in source order and writing values to target paths.
-If a rule does not produce output, no value is written for that target.
-
-### 9.2. Path collisions and overwrites
-
-The v1 library does not define a rich conflict-resolution framework.
-Consumers should avoid ambiguous or structurally conflicting target-path designs.
-
-In practice, source authors should treat target layout as deterministic and non-overlapping.
-
-### 9.3. Intentional limitations
-
-The library is intentionally limited to transparent data transformation.
-It does not attempt to solve all possible transformation problems.
-
-## 10. Non-goals
-
-`@processengine/mappings` is not intended for:
-- complex algorithmic logic;
-- stateful processing;
-- orchestration logic;
-- external calls;
-- imperative programming inside mapping source;
-- becoming a general-purpose language.
-
-If a problem is fundamentally procedural, it should stay procedural in code.
-
-## 11. Compatibility guarantees
-
-Public compatibility is judged by documented public contract.
-
-Public contract includes:
-- public API names and signatures;
-- diagnostics shape;
-- typed error shape at documented level;
-- runtime success result shape;
-- documented trace levels and event model;
-- explicit package exports;
-- documented minimal artifact contract.
-
-The following may change without breaking public compatibility:
-- internal validator layout;
-- internal executor structure;
-- undocumented artifact internals;
-- internal helper modules;
-- internal implementation strategy.
-
-Breaking change occurs when a documented part of the public contract changes incompatibly.
+Out of scope in 2.1.x:
+- numeric indexes;
+- wildcard outside aggregate `from`;
+- nested wildcard;
+- `groupBy`, `mapEach`, `flatMap`, general `reduce`;
+- arbitrary expression DSL;
+- nested aggregate operators;
+- custom operators as the primary answer for array semantics.

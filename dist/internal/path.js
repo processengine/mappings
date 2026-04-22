@@ -1,10 +1,27 @@
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 
-export function isPlainObject(val) {
-  if (val === null || typeof val !== 'object') return false;
-  if (Array.isArray(val)) return false;
-  const proto = Object.getPrototypeOf(val);
+export function isPlainObject(value) {
+  if (Object.prototype.toString.call(value) !== '[object Object]') return false;
+  const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
+}
+
+function validateCommonSegments(segments, pathStr, targetCodeBase) {
+  for (const seg of segments) {
+    if (seg === '') {
+      return { valid: false, code: targetCodeBase, message: `${targetCodeBase === 'INVALID_PATH' ? 'Path' : 'Target path'} contains empty segment: "${pathStr}"` };
+    }
+    if (FORBIDDEN_SEGMENTS.has(seg)) {
+      return { valid: false, code: targetCodeBase, message: `${targetCodeBase === 'INVALID_PATH' ? 'Path' : 'Target path'} contains forbidden segment "${seg}": "${pathStr}"` };
+    }
+    if (/^\d+$/.test(seg)) {
+      return { valid: false, code: targetCodeBase, message: `${targetCodeBase === 'INVALID_PATH' ? 'Array index access not supported in v2 paths' : 'Array index in target path not supported'}: "${pathStr}"` };
+    }
+    if (seg.includes('[*]')) {
+      return { valid: false, code: targetCodeBase, message: `Wildcard [*] is not allowed in this path form: "${pathStr}"` };
+    }
+  }
+  return { valid: true };
 }
 
 export function validatePathSyntax(pathStr) {
@@ -12,17 +29,8 @@ export function validatePathSyntax(pathStr) {
     return { valid: false, code: 'INVALID_PATH', message: 'Path must be a non-empty string' };
   }
   const segments = pathStr.split('.');
-  for (const seg of segments) {
-    if (seg === '') {
-      return { valid: false, code: 'INVALID_PATH', message: `Path contains empty segment: "${pathStr}"` };
-    }
-    if (FORBIDDEN_SEGMENTS.has(seg)) {
-      return { valid: false, code: 'INVALID_PATH', message: `Path contains forbidden segment "${seg}": "${pathStr}"` };
-    }
-    if (/^\d+$/.test(seg)) {
-      return { valid: false, code: 'INVALID_PATH', message: `Array index access not supported in v1: "${pathStr}"` };
-    }
-  }
+  const common = validateCommonSegments(segments, pathStr, 'INVALID_PATH');
+  if (!common.valid) return common;
   if (segments[0] !== 'sources') {
     return { valid: false, code: 'INVALID_PATH', message: `Path must start with "sources.": "${pathStr}"` };
   }
@@ -32,23 +40,39 @@ export function validatePathSyntax(pathStr) {
   return { valid: true };
 }
 
+export function validateAggregateFromPathSyntax(pathStr) {
+  if (!pathStr || typeof pathStr !== 'string') {
+    return { valid: false, code: 'INVALID_WILDCARD_USAGE', message: 'Aggregate from path must be a non-empty string' };
+  }
+  if (!pathStr.endsWith('[*]')) {
+    return { valid: false, code: 'INVALID_WILDCARD_USAGE', message: `Aggregate from path must end with [*]: "${pathStr}"` };
+  }
+  if ((pathStr.match(/\[\*\]/g) || []).length !== 1) {
+    return { valid: false, code: 'INVALID_WILDCARD_USAGE', message: `Only one [*] wildcard is allowed in aggregate from path: "${pathStr}"` };
+  }
+  const container = pathStr.slice(0, -3);
+  return validatePathSyntax(container);
+}
+
+export function validateElementFieldPathSyntax(pathStr) {
+  if (!pathStr || typeof pathStr !== 'string') {
+    return { valid: false, code: 'INVALID_PATH', message: 'Element field path must be a non-empty string' };
+  }
+  const segments = pathStr.split('.');
+  const common = validateCommonSegments(segments, pathStr, 'INVALID_PATH');
+  if (!common.valid) return common;
+  if (segments.length < 1) {
+    return { valid: false, code: 'INVALID_PATH', message: `Element field path must not be empty: "${pathStr}"` };
+  }
+  return { valid: true };
+}
+
 export function validateTargetPathSyntax(pathStr) {
   if (!pathStr || typeof pathStr !== 'string') {
     return { valid: false, code: 'INVALID_TARGET_PATH', message: 'Target path must be a non-empty string' };
   }
   const segments = pathStr.split('.');
-  for (const seg of segments) {
-    if (seg === '') {
-      return { valid: false, code: 'INVALID_TARGET_PATH', message: `Target path contains empty segment: "${pathStr}"` };
-    }
-    if (FORBIDDEN_SEGMENTS.has(seg)) {
-      return { valid: false, code: 'INVALID_TARGET_PATH', message: `Target path contains forbidden segment "${seg}": "${pathStr}"` };
-    }
-    if (/^\d+$/.test(seg)) {
-      return { valid: false, code: 'INVALID_TARGET_PATH', message: `Array index in target path not supported in v1: "${pathStr}"` };
-    }
-  }
-  return { valid: true };
+  return validateCommonSegments(segments, pathStr, 'INVALID_TARGET_PATH');
 }
 
 export function resolvePath(sourcesMap, pathStr) {
@@ -61,32 +85,14 @@ export function resolvePath(sourcesMap, pathStr) {
 
   let current = sourcesMap[sourceName];
 
-  for (let i = 2; i < segments.length - 1; i++) {
-    if (!isPlainObject(current)) {
+  for (let i = 2; i < segments.length; i++) {
+    if (!isPlainObject(current) || !Object.prototype.hasOwnProperty.call(current, segments[i])) {
       return { resolved: false };
     }
-    const key = segments[i];
-    if (!Object.prototype.hasOwnProperty.call(current, key)) {
-      return { resolved: false };
-    }
-    current = current[key];
+    current = current[segments[i]];
   }
 
-  const lastKey = segments[segments.length - 1];
-
-  if (segments.length === 2) {
-    return { resolved: true, value: current };
-  }
-
-  if (!isPlainObject(current)) {
-    return { resolved: false };
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(current, lastKey)) {
-    return { resolved: false };
-  }
-
-  return { resolved: true, value: current[lastKey] };
+  return { resolved: true, value: current };
 }
 
 export function setTargetPath(result, targetPath, value) {

@@ -2,11 +2,9 @@ import { validateDefinition } from '../internal/validator.js';
 
 export function validateMappingsSource(source) {
   try {
-    const diagnostic = validateDefinition(source);
-    if (!diagnostic) {
-      return { ok: true, diagnostics: [] };
-    }
-    return { ok: false, diagnostics: [diagnostic] };
+    const diagnostics = validateDefinition(source);
+    const hasErrors = diagnostics.some((item) => item.level !== 'warning');
+    return { ok: !hasErrors, diagnostics };
   } catch (cause) {
     return {
       ok: false,

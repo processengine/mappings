@@ -1,6 +1,6 @@
 {
   "name": "@processengine/mappings",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "Declarative JSON mappings runtime for ProcessEngine",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,6 +29,7 @@
     "CHANGELOG.md",
     "RELEASE_NOTES_2.0.0.md",
     "RELEASE_NOTES_2.0.1.md",
+    "RELEASE_NOTES_2.1.0.md",
     "LICENSE"
   ],
   "scripts": {

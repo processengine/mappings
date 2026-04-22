@@ -18,18 +18,24 @@ function cloneJson(value) {
 
 export class PreparedMappingsArtifact {
   #definition;
+  #compiledPlan;
 
-  constructor(source) {
+  constructor(source, { version = 'v2', compiledPlan = null } = {}) {
     this.type = 'mapping';
     this.mappingId = source.mappingId;
-    this.version = 'v1';
+    this.version = version;
     this[ARTIFACT_MARKER] = true;
     this.#definition = deepFreeze(cloneJson(source));
+    this.#compiledPlan = compiledPlan ? deepFreeze(compiledPlan) : null;
     Object.freeze(this);
   }
 
   getDefinition() {
     return this.#definition;
+  }
+
+  getCompiledPlan() {
+    return this.#compiledPlan;
   }
 }
 

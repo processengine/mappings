@@ -1,0 +1,55 @@
+{
+  "mappingId": "issues.to.facts.v1",
+  "sources": {
+    "rules": "object",
+    "findClient": "object"
+  },
+  "output": {
+    "facts.errorCount": {
+      "count": {
+        "from": "sources.rules.issues[*]",
+        "where": {
+          "field": "level",
+          "equals": "ERROR"
+        }
+      }
+    },
+    "facts.warningCodes": {
+      "collect": {
+        "from": "sources.rules.issues[*]",
+        "where": {
+          "field": "level",
+          "equals": "WARNING"
+        },
+        "value": "code"
+      }
+    },
+    "facts.hasException": {
+      "existsAny": {
+        "from": "sources.rules.issues[*]",
+        "where": {
+          "field": "level",
+          "equals": "EXCEPTION"
+        }
+      }
+    },
+    "facts.allErrorsInContacts": {
+      "existsAll": {
+        "from": "sources.rules.issues[*]",
+        "where": {
+          "field": "level",
+          "equals": "ERROR"
+        },
+        "match": {
+          "field": "field",
+          "startsWith": "beneficiary.contacts."
+        }
+      }
+    },
+    "facts.foundClient": {
+      "pickFirst": {
+        "from": "sources.findClient.clients[*]"
+      }
+    }
+  }
+}

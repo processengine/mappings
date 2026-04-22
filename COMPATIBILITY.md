@@ -1,50 +1,85 @@
-# Compatibility
+# COMPATIBILITY
 
-Public compatibility for `@processengine/mappings` is evaluated by the documented package contract rather than by internal implementation details.
+## Scope
 
-## Public contract
+This document defines the compatibility surface of `@processengine/mappings` as a ProcessEngine family library.
 
-The following are public:
+## Runtime and package compatibility
 
-- exported API names and signatures;
-- diagnostics shape returned by `validateMappings(...)`;
-- `MappingsCompileError` and `MappingsRuntimeError` at the documented level;
-- success result shape of `executeMappings(...)`;
-- documented trace levels and documented event model;
-- explicit package exports;
-- documented minimal artifact contract.
+- Node.js: `>=20.19.0`
+- Package shape: ESM-first, `dist/`-only public runtime
+- CLI: `bin/mappings.js` commands documented in README
 
-## Not public
+## Public API compatibility
 
-The following are internal and may change without a breaking release:
+The following are public and compatibility-relevant:
+- `validateMappings(...)`
+- `prepareMappings(...)`
+- `executeMappings(...)`
+- `MappingsCompileError`
+- `MappingsRuntimeError`
+- diagnostics result shape `{ ok, diagnostics }`
+- success result shape `{ output, trace? }`
+- trace levels `false | 'basic' | 'verbose'`
 
-- internal validator structure;
-- internal executor structure;
-- internal helper modules;
-- internal artifact internals beyond documented minimal fields;
-- undocumented trace details;
-- build scripts and internal repository layout.
+## Source artifact compatibility
 
-## Artifact compatibility
+Public source artifact compatibility covers:
+- top-level fields `mappingId`, `sources`, `output`
+- documented built-in operators
+- documented operator field semantics
+- documented limitations of first array DSL version
 
-The prepared artifact is intentionally opaque-ish.
+Adding new optional operators is non-breaking.
+Changing the meaning of an existing operator is breaking.
 
-The public guarantee is limited to:
-- it is a prepared mappings artifact;
-- it is accepted by `executeMappings(...)`;
-- it behaves as immutable from the consumer perspective;
-- documented minimal identity fields remain stable at the public level.
+## Prepared artifact compatibility
 
-No broad serialization compatibility is promised unless explicitly documented in a future release.
+Prepared artifact compatibility is intentionally narrow.
+
+Public guarantees:
+- artifact `type === 'mapping'`
+- `mappingId` remains stable
+- `version` remains present
+- artifact is accepted by `executeMappings(...)`
+- artifact is immutable from consumer perspective
+
+### Artifact versions
+
+- `v1` — legacy prepared artifact execution path
+- `v2` — current prepared artifact with compiled execution plan
+
+`executeMappings(...)` accepts both `v1` and `v2` prepared artifacts.
+`prepareMappings(...)` in `2.1.x` produces `v2`.
+
+Internal compiled structures of `v2` are intentionally not public.
+
+## Runtime result compatibility
+
+The runtime success result is transport-safe / JSON-safe by normative shape and suitable for direct handoff to the next ProcessEngine family layer without host-side cleanup.
+
+Breaking changes include:
+- removing `output`
+- replacing `trace` with another envelope shape
+- returning non-JSON-safe runtime results
+
+## Trace compatibility
+
+Stable trace contract:
+- event array when trace is enabled
+- event fields `kind`, `artifactType`, `artifactId`, `step`, `at`, `outcome`, `target`
+- `basic` remains compact
+- `verbose` may add more payload fragments
+
+Adding optional trace details is non-breaking.
+Removing stable fields or changing trace mode semantics is breaking.
 
 ## Breaking changes
 
-A change is breaking if it incompatibly changes any documented part of the public contract, including:
-
-- public API names or signatures;
-- documented diagnostics shape;
-- documented error shape;
-- documented success result shape;
-- documented trace modes or event model;
-- explicit exports;
-- documented artifact guarantees.
+Breaking changes include:
+- public API rename or removal
+- change in source operator semantics
+- incompatible artifact version handling
+- incompatible runtime result shape
+- incompatible trace mode semantics
+- removal of documented diagnostics or error codes relied on by examples/tests

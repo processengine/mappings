@@ -1,4 +1,5 @@
-import { execute as executeInternal } from '../internal/executor.js';
+import { execute as executeLegacy } from '../internal/executor.js';
+import { executeCompiledPlan } from '../internal/compiledExecutor.js';
 import { isPlainObject, validateJsonSafeValue } from '../internal/path.js';
 import { createTraceRecorder } from '../trace/createTraceRecorder.js';
 import { isPreparedMappingsArtifact } from './artifact.js';
@@ -48,14 +49,25 @@ export function executeMappingsInternal(artifact, input, options = {}) {
 
   const traceLevel = options.trace ?? false;
   const captureTrace = traceLevel === 'basic' || traceLevel === 'verbose';
-  const { result, trace: legacyTrace } = executeInternal(definition, input, captureTrace);
-  const runtimeResult = { output: result };
+  const runtimeResult = { output: {} };
 
+  if (artifact.version === 'v2' && artifact.getCompiledPlan()) {
+    const executed = executeCompiledPlan(artifact.getCompiledPlan(), input);
+    runtimeResult.output = executed.output;
+    if (captureTrace) {
+      const recorder = createTraceRecorder({ artifactId: artifact.mappingId, level: traceLevel, redact: options.redact });
+      recorder.recordCompiledEntries(executed.trace ?? []);
+      runtimeResult.trace = recorder.finalize();
+    }
+    return runtimeResult;
+  }
+
+  const { result, trace: legacyTrace } = executeLegacy(definition, input, captureTrace);
+  runtimeResult.output = result;
   if (captureTrace) {
     const recorder = createTraceRecorder({ artifactId: artifact.mappingId, level: traceLevel, redact: options.redact });
     recorder.recordLegacyEntries(legacyTrace ?? []);
     runtimeResult.trace = recorder.finalize();
   }
-
   return runtimeResult;
 }

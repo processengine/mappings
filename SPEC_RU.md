@@ -1,45 +1,31 @@
-# Спецификация: @processengine/mappings
+# SPEC_RU: @processengine/mappings
 
-## 1. Назначение библиотеки
+## Что нормативно определяется этим документом
 
-`@processengine/mappings` это runtime-библиотека семейства ProcessEngine для декларативного преобразования и нормализации данных.
+Документ нормативно фиксирует:
+- роль библиотеки в семейства ProcessEngine;
+- lifecycle `validate -> prepare -> execute`;
+- shape source artifact;
+- semantics built-in operators;
+- prepared artifact contract;
+- runtime result contract;
+- diagnostics / runtime errors / trace;
+- ограничения первой версии array DSL.
 
-Библиотека предназначена для того, чтобы:
+## 1. Роль библиотеки
 
-- преобразовывать сырой вход в нормализованную выходную структуру;
-- выносить логику преобразования из окружающего сервисного кода;
-- готовить компактные производные данные для следующего слоя процесса;
-- давать устойчивый жизненный цикл `validate -> prepare -> execute` для mapping-артефактов.
+`@processengine/mappings` — слой нормализации и построения facts.
+Он не должен превращаться в язык программирования, оркестратор или decision-runtime.
 
-Библиотека не предназначена для того, чтобы:
+## 2. Lifecycle
 
-- выражать произвольную процедурную логику;
-- выполнять обработку состояния;
-- делать внешние вызовы;
-- подменять код там, где источник сложности на самом деле алгоритмический.
+- `validateMappings(...)` — мягкая валидация без исключения на обычных DSL-проблемах
+- `prepareMappings(...)` — compile-first подготовка, на blocking failure бросает `MappingsCompileError`
+- `executeMappings(...)` — runtime только для prepared artifact, без hidden compile
 
-В большом потоке данных `mappings` играет роль границы преобразования между входными данными и следующим потребителем нормализованного output.
+## 3. Source artifact
 
-## 2. Модель source
-
-### 2.1. Что считается source
-
-Mapping `source` это декларативный JSON-объект, который описывает:
-
-- идентификатор mapping-а;
-- объявленные runtime-sources, доступные на исполнении;
-- выходную структуру, которую нужно построить;
-- оператор, применяемый к каждому output-target.
-
-### 2.2. Верхнеуровневая форма source
-
-Форма source в v1:
-
-- `mappingId: string`
-- `sources: Record<string, 'object'>`
-- `output: Record<TargetPath, OperatorDefinition>`
-
-Минимальный пример:
+Минимальный shape:
 
 ```json
 {
@@ -48,44 +34,23 @@ Mapping `source` это декларативный JSON-объект, котор
     "raw": "object"
   },
   "output": {
-    "profile.name": { "normalizeSpaces": "sources.raw.fullName" },
-    "profile.hasTags": { "exists": "sources.raw.tags" }
+    "profile.name": { "normalizeSpaces": "sources.raw.fullName" }
   }
 }
 ```
 
-### 2.3. Обязательные части
+## 4. Path semantics
 
-Валидный source должен содержать:
+Обычные source paths:
+- начинаются с `sources.`
+- не используют numeric indexes
+- не используют wildcard
 
-- непустую строку `mappingId`;
-- непустой plain object `sources`;
-- непустой plain object `output`.
+Для aggregate `from` разрешён только один `[*]`, только как последний сегмент.
 
-### 2.4. Объявления sources
+## 5. Built-in operators
 
-В v1 объявления sources намеренно очень ограничены по объёму.
-
-Каждое объявленное имя source сейчас сопоставляется со значением `'object'`.
-Это означает, что на runtime для каждого объявленного source ожидается plain object.
-
-Пример:
-
-```json
-{
-  "sources": {
-    "raw": "object",
-    "meta": "object"
-  }
-}
-```
-
-### 2.5. Правила output
-
-Каждая запись в `output` использует ровно один корневой оператор.
-
-Поддерживаемые корневые операторы в v1:
-
+Scalar/object operators:
 - `from`
 - `literal`
 - `exists`
@@ -99,161 +64,46 @@ Mapping `source` это декларативный JSON-объект, котор
 - `mapValue`
 - `transform`
 
-### 2.6. Правила путей
+## 6. Ограниченный array DSL в 2.1.x
 
-Source paths:
+Поддерживаются:
+- `collect`
+- `count`
+- `existsAny`
+- `existsAll`
+- `pickFirst`
 
-- должны быть строками;
-- должны начинаться с `sources.`;
-- должны ссылаться на объявленное имя source;
-- не должны содержать запрещённые prototype-related сегменты;
-- не должны использовать числовые сегменты путей для доступа к массивам в v1.
+Поддерживаемые comparators:
+- `equals`
+- `in`
+- `startsWith`
 
-Target paths:
+### Семантика special cases
 
-- должны быть непустыми строками;
-- не должны содержать запрещённые prototype-related сегменты;
-- не должны использовать числовые сегменты путей в v1.
+- `collect([]) -> []`
+- `count([]) -> 0`
+- `existsAny([]) -> false`
+- `existsAll([]) -> true`
+- `pickFirst([]) -> null`
 
-### 2.7. Структурные ограничения source
+`collect` с неразрешённым `value` пропускает элемент и отражает это в trace через `droppedCount`.
 
-Модель source намеренно ограничена.
+## 7. Prepared artifact
 
-В частности, v1 не пытается моделировать:
+Публично гарантируется минимум:
+- `type === 'mapping'`
+- `mappingId`
+- `version`
+- пригодность для `executeMappings(...)`
+- иммутабельность с точки зрения потребителя
 
-- произвольную ветвящуюся логику;
-- циклы;
-- побочные эффекты;
-- внешние вызовы;
-- произвольный исполняемый код внутри source.
+Версии:
+- `v1` — legacy compatibility path
+- `v2` — compiled execution plan
 
-## 3. Семантика compile-фазы
+## 8. Runtime result contract
 
-### 3.1. `validateMappings(source, options?)`
-
-`validateMappings(...)` выполняет мягкую проверку.
-
-Его роль:
-
-- проверить форму source;
-- провалидировать объявленные пути и операторы;
-- провалидировать аргументы операторов;
-- вернуть структурированные diagnostics;
-- не бросать исключение только из-за того, что source невалиден.
-
-Форма результата:
-
-```js
-{
-  ok: boolean,
-  diagnostics: MappingDiagnostic[]
-}
-```
-
-### 3.2. `prepareMappings(source, options?)`
-
-`prepareMappings(...)` — это канонический production-entrypoint для prepare-фазы.
-
-Его роль:
-
-- провалидировать source;
-- отклонить невалидный source через typed compile error;
-- вернуть prepared runtime artifact при успехе.
-
-### 3.3. Что валидируется на compile-фазе
-
-Compile-фаза как минимум покрывает:
-
-- верхнеуровневую структуру source;
-- наличие и типы `mappingId`, `sources`, `output`;
-- консистентность объявлений sources;
-- синтаксис source-path;
-- синтаксис target-path;
-- набор поддерживаемых операторов;
-- форму аргументов операторов;
-- ограничения transform-step;
-- ограничения JSON-safe literals там, где это применимо.
-
-### 3.4. Что считается compile failure
-
-Compile failure — это любое состояние source, при котором нельзя создать prepared artifact.
-
-Примеры:
-
-- отсутствуют обязательные верхнеуровневые поля;
-- есть ссылки на необъявленные sources;
-- некорректный синтаксис source-path;
-- некорректный синтаксис target-path;
-- неподдерживаемые операторы;
-- некорректная форма аргументов оператора.
-
-### 3.5. Разница между validate и prepare
-
-`validateMappings(...)` возвращает diagnostics без throw на невалидном source.
-`prepareMappings(...)` использует те же compile-правила, но при неуспехе выбрасывает `MappingsCompileError` вместо возврата success-path artifact.
-
-## 4. Контракт prepared artifact
-
-Artifact у `mappings` — это prepared runtime entity, которую возвращает `prepareMappings(...)`.
-
-Публично artifact намеренно минимален.
-
-Библиотека гарантирует только, что:
-
-- это prepared mappings artifact;
-- он содержит минимальные устойчивые identity-поля, задокументированные в публичных типах;
-- его можно передавать в `executeMappings(...)`;
-- с точки зрения потребителя он ведёт себя как иммутабельный.
-
-Artifact нужно воспринимать как intentionally opaque-ish сущность.
-
-Потребитель не должен считать artifact:
-
-- богатым внешним сериализуемым форматом;
-- стабильным публичным AST-контрактом;
-- местом, где библиотека обещает compile-внутренности сверх минимально задокументированных полей.
-
-Artifact — это runtime-граница, а не широкий внешний формат хранения.
-
-## 5. Семантика runtime-фазы
-
-### 5.1. `executeMappings(artifact, input, options?)`
-
-`executeMappings(...)` — канонический runtime-entrypoint.
-
-Он:
-
-- принимает только prepared artifact;
-- принимает runtime input, индексированный по объявленным source names;
-- не выполняет скрытую compile или prepare-фазу;
-- возвращает success output и опциональный trace;
-- выбрасывает `MappingsRuntimeError` при runtime failure.
-
-### 5.2. Runtime input
-
-Runtime input должен быть plain object, где ключи совпадают с объявленными именами sources.
-Каждый объявленный source должен присутствовать и содержать plain object.
-
-Содержимое sources ожидается JSON-safe.
-Не-JSON-safe значения, циклические ссылки и неподдерживаемые object-типы могут привести к runtime failure.
-
-### 5.3. Success path
-
-При успешном исполнении библиотека возвращает преобразованный output.
-Если включён trace, он возвращается рядом с output.
-
-### 5.4. Runtime failure
-
-Runtime failure покрывает состояния вроде:
-
-- в `executeMappings(...)` передан невалидный artifact;
-- отсутствует объявленный source в runtime input;
-- неверный runtime source type;
-- неверное содержимое runtime source.
-
-## 6. Контракт runtime-результата
-
-Успешное исполнение возвращает:
+Успешный runtime-result:
 
 ```js
 {
@@ -262,153 +112,39 @@ Runtime failure покрывает состояния вроде:
 }
 ```
 
-Нормативные поля:
+Результат transport-safe / JSON-safe по нормативному shape.
 
-- `output`
-- `trace?`
+## 9. Diagnostics и runtime errors
 
-Важные ограничения:
+Representative diagnostics:
+- `INVALID_MAPPING_ID`
+- `INVALID_SOURCE_DECLARATION`
+- `INVALID_MAPPING_SCHEMA`
+- `UNKNOWN_OPERATOR`
+- `INVALID_ARGS`
+- `CONFLICTING_TARGET_PATHS`
+- `INVALID_WILDCARD_USAGE`
+- `INVALID_CONDITION_SHAPE`
+- `MISSING_VALUE_IN_COLLECT`
+- `EMPTY_IN_ARRAY`
 
-- это не `status/envelope` объект;
-- compile diagnostics не смешиваются с success result;
-- runtime errors не возвращаются как часть success result.
+Runtime failures идут через `MappingsRuntimeError`.
 
-## 7. Diagnostics и errors
+## 10. Trace
 
-### 7.1. Форма diagnostics
-
-Compile diagnostics — это структурированные объекты вида:
-
-- `code: string`
-- `level: 'error' | 'warning' | 'info'`
-- `message: string`
-- `path?: string`
-- `details?: Record<string, unknown>`
-
-Diagnostics рассчитаны на машинную обработку.
-Formatter-функции — это вспомогательный слой для CLI, логов и человекочитаемого вывода.
-
-### 7.2. `MappingsCompileError`
-
-`MappingsCompileError` выбрасывается из `prepareMappings(...)`, когда source нельзя подготовить.
-
-Он содержит:
-
-- `code`
-- `message`
-- `diagnostics`
-- опциональный `cause`
-
-### 7.3. `MappingsRuntimeError`
-
-`MappingsRuntimeError` выбрасывается из `executeMappings(...)`, когда исполнение не может продолжиться или runtime input некорректен.
-
-Он содержит:
-
-- `code`
-- `message`
-- опциональный `details`
-- опциональный `cause`
-
-### 7.4. Formatter helpers
-
-Библиотека предоставляет:
-
-- `formatMappingsDiagnostics(...)`
-- `formatMappingsRuntimeError(...)`
-
-Эти helpers не заменяют структурированные diagnostics и errors. Они только форматируют их для вывода.
-
-## 8. Семантика trace
-
-Поддерживаемые режимы trace:
-
+Уровни trace:
 - `false`
-- `basic`
-- `verbose`
+- `'basic'`
+- `'verbose'`
 
-### 8.1. `false`
+Для aggregate operators `basic` trace остаётся компактным и содержит только summary-поля, без сериализации всего массива.
 
-Trace не возвращается.
+## 11. Ограничения первой версии
 
-### 8.2. `basic`
-
-`basic` предназначен для компактной и более безопасной операционной наблюдаемости.
-
-Ожидаемое поведение:
-
-- события исполнения присутствуют;
-- сырые значения не раскрываются больше необходимого;
-- trace полезен, но не превращается в полный дамп данных.
-
-### 8.3. `verbose`
-
-`verbose` может включать дополнительные redacted-фрагменты входа и результата, полезные для отладки, локального анализа и тестов.
-
-`verbose` богаче, чем `basic`, но библиотека всё равно не обещает, что это будет идеальный дамп всего состояния исполнения.
-
-### 8.4. Redaction model
-
-Trace API поддерживает управление маскированием через `options.redact`.
-
-Это нужно, чтобы хост-приложение могло:
-
-- маскировать значения до попадания в trace;
-- избегать утечки чувствительных фрагментов payload;
-- подстраивать trace под свои требования безопасности.
-
-## 9. Семантика конфликтов и ограничения
-
-### 9.1. Сборка output
-
-Output собирается путём применения правил в порядке source и записи значений по target paths.
-Если правило не создаёт output, значение по этому target не записывается.
-
-### 9.2. Коллизии путей и перезапись
-
-В v1 библиотека не задаёт богатую модель разрешения конфликтов.
-Потребителям нужно избегать неоднозначного или структурно конфликтующего проектирования target paths.
-
-На практике source нужно проектировать так, чтобы target layout был детерминированным и не пересекающимся.
-
-### 9.3. Намеренные ограничения
-
-Библиотека намеренно ограничена задачами прозрачного преобразования данных.
-Она не пытается покрыть все возможные сценарии трансформации.
-
-## 10. Non-goals
-
-`@processengine/mappings` не предназначена для:
-
-- сложной алгоритмической логики;
-- stateful processing;
-- orchestration logic;
-- внешних вызовов;
-- императивного программирования внутри mapping source;
-- превращения в язык общего назначения.
-
-Если задача по своей природе процедурная, она должна оставаться процедурной в коде.
-
-## 11. Гарантии совместимости
-
-Публичная совместимость оценивается по задокументированному публичному контракту.
-
-К публичному контракту относятся:
-
-- имена и сигнатуры публичного API;
-- форма diagnostics;
-- форма typed errors на документированном уровне;
-- форма success runtime result;
-- документированные режимы trace и модель trace-событий;
-- явные package exports;
-- задокументированный минимальный контракт artifact.
-
-Следующее может меняться без breaking change:
-
-- layout внутреннего validator;
-- структура внутреннего executor;
-- недокументированные внутренности artifact;
-- внутренние helper modules;
-- внутренняя стратегия реализации.
-
-Breaking change имеет место тогда, когда несовместимо меняется задокументированная часть публичного контракта.
+В `2.1.x` не входят:
+- numeric indexes;
+- wildcard вне aggregate `from`;
+- nested wildcard;
+- `groupBy`, `mapEach`, `flatMap`, общий `reduce`;
+- arbitrary expression DSL;
+- nested aggregate operators.
