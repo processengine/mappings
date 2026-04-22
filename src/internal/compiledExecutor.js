@@ -216,6 +216,38 @@ function runAggregateRule(rule, sources) {
     return { outputCreated: true, outputValue: out, traceEntry: { ...traceBase, resultType: 'array', resultLength: out.length, droppedCount } };
   }
 
+  if (rule.op === 'collectObject') {
+    const out = [];
+    let droppedCount = 0;
+    let droppedFieldCount = 0;
+    let partialObjectCount = 0;
+    const totalFieldCount = Object.keys(rule.fieldAccessors).length;
+    for (const item of selectedItems) {
+      const obj = {};
+      let resolvedFieldCount = 0;
+      for (const [key, accessor] of Object.entries(rule.fieldAccessors)) {
+        const resolution = accessor.resolve(item);
+        if (!resolution.resolved) {
+          droppedFieldCount += 1;
+          continue;
+        }
+        obj[key] = deepCopy(resolution.value);
+        resolvedFieldCount += 1;
+      }
+      if (resolvedFieldCount === 0) {
+        droppedCount += 1;
+        continue;
+      }
+      if (resolvedFieldCount < totalFieldCount) partialObjectCount += 1;
+      out.push(obj);
+    }
+    return {
+      outputCreated: true,
+      outputValue: out,
+      traceEntry: { ...traceBase, resultType: 'array', resultLength: out.length, droppedCount, droppedFieldCount, partialObjectCount },
+    };
+  }
+
   if (rule.op === 'count') {
     return { outputCreated: true, outputValue: selectedCount, traceEntry: { ...traceBase, resultType: 'number', resultValue: selectedCount } };
   }

@@ -124,6 +124,7 @@
         { "type": "object", "required": ["transform"], "additionalProperties": false, "properties": { "transform": { "type": "object", "required": ["from", "steps"], "additionalProperties": false, "properties": { "from": { "type": "string", "minLength": 1 }, "steps": { "type": "array", "minItems": 2, "maxItems": 8, "items": { "$ref": "#/definitions/TransformStep" } } } } } },
         { "type": "object", "required": ["collect"], "additionalProperties": false, "properties": { "collect": { "allOf": [{ "$ref": "#/definitions/AggregateBase" }, { "required": ["value"] }] } } },
         { "type": "object", "required": ["count"], "additionalProperties": false, "properties": { "count": { "$ref": "#/definitions/AggregateBase" } } },
+        { "type": "object", "required": ["collectObject"], "additionalProperties": false, "properties": { "collectObject": { "allOf": [{ "$ref": "#/definitions/AggregateBase" }, { "required": ["fields"] }] } } },
         { "type": "object", "required": ["existsAny"], "additionalProperties": false, "properties": { "existsAny": { "$ref": "#/definitions/AggregateBase" } } },
         { "type": "object", "required": ["existsAll"], "additionalProperties": false, "properties": { "existsAll": { "allOf": [{ "$ref": "#/definitions/AggregateBase" }, { "required": ["match"] }] } } },
         { "type": "object", "required": ["pickFirst"], "additionalProperties": false, "properties": { "pickFirst": { "$ref": "#/definitions/AggregateBase" } } }

@@ -24,6 +24,20 @@
         "value": "code"
       }
     },
+    "facts.merchantErrors": {
+      "collectObject": {
+        "from": "sources.rules.issues[*]",
+        "where": {
+          "field": "level",
+          "equals": "ERROR"
+        },
+        "fields": {
+          "code": "code",
+          "message": "message",
+          "field": "field"
+        }
+      }
+    },
     "facts.hasException": {
       "existsAny": {
         "from": "sources.rules.issues[*]",

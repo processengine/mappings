@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.0
+
+### Added
+- Added `collectObject` aggregate operator for projecting array elements into compact objects.
+- Added validation, compile, runtime, trace, schema and example support for `collectObject`.
+
+### Changed
+- Raised package version to `2.2.0`.
+- Documentation updated across README, SPEC, migration notes and release notes for the new aggregate operator.
+
+### Compatibility
+- Non-breaking for existing 2.1.x artifacts and runtime usage.
+- No changes to Node baseline, package shape, exports or CLI commands.
+
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Compatibility policy: [COMPATIBILITY.md](COMPATIBILITY.md).

@@ -83,3 +83,8 @@ Breaking changes include:
 - incompatible runtime result shape
 - incompatible trace mode semantics
 - removal of documented diagnostics or error codes relied on by examples/tests
+
+
+## 2.2.0 additive DSL change
+
+Version 2.2.0 adds the non-breaking aggregate operator `collectObject`. Existing prepared artifacts and mapping sources remain valid.

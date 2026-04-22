@@ -10,7 +10,7 @@ const SUPPORTED_OPERATORS = new Set([
   'from', 'literal', 'exists', 'equals', 'coalesce',
   'trim', 'lowercase', 'uppercase', 'normalizeSpaces', 'removeNonDigits',
   'mapValue', 'transform',
-  'collect', 'count', 'existsAny', 'existsAll', 'pickFirst',
+  'collect', 'collectObject', 'count', 'existsAny', 'existsAll', 'pickFirst',
 ]);
 
 const STRING_ROOT_OPERATORS = new Set([
@@ -193,6 +193,37 @@ function validateConditionShape(condition, context, targetPath, slot) {
   return [];
 }
 
+function validateCollectObjectFields(fields, context, targetPath) {
+  const loc = { operator: 'collectObject', targetPath };
+  if (!isPlainObject(fields)) {
+    return [makeDiagnostic('INVALID_ARGS', `Operator 'collectObject' requires plain-object "fields" in "${context}"`, loc)];
+  }
+
+  const keys = Object.keys(fields);
+  if (keys.length === 0) {
+    return [makeDiagnostic('INVALID_ARGS', `Operator 'collectObject' requires non-empty "fields" in "${context}"`, loc)];
+  }
+
+  const diagnostics = [];
+  for (const key of keys) {
+    const keyValidation = validateTargetPathSyntax(key);
+    if (!keyValidation.valid) {
+      diagnostics.push(makeDiagnostic(keyValidation.code, `${keyValidation.message} (in "${context}")`, { ...loc, path: key }));
+      continue;
+    }
+
+    if (typeof fields[key] !== 'string') {
+      diagnostics.push(makeDiagnostic('INVALID_ARGS', `collectObject field "${key}" must map to a relative path string in "${context}"`, { ...loc, path: key }));
+      continue;
+    }
+
+    const valueErr = validateElementFieldPath(fields[key], `${context}.fields.${key}`, { ...loc, path: fields[key] });
+    if (valueErr) diagnostics.push(valueErr);
+  }
+
+  return diagnostics;
+}
+
 function validateAggregateOperator(op, args, targetPath, declaredSources) {
   const loc = { operator: op, targetPath };
   if (!isPlainObject(args)) {
@@ -215,6 +246,9 @@ function validateAggregateOperator(op, args, targetPath, declaredSources) {
       if (valueErr) diagnostics.push(valueErr);
     }
     if (args.match) diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator 'collect' does not support "match" in first version for "${targetPath}"`, loc));
+  } else if (op === 'collectObject') {
+    diagnostics.push(...validateCollectObjectFields(args.fields, targetPath, targetPath));
+    if (args.match) diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator 'collectObject' does not support "match" in first version for "${targetPath}"`, loc));
   } else if ('value' in args) {
     diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator '${op}' does not support "value" in "${targetPath}"`, loc));
   }
@@ -227,6 +261,7 @@ function validateAggregateOperator(op, args, targetPath, declaredSources) {
 
   const allowed = new Set(['from', 'where']);
   if (op === 'collect') allowed.add('value');
+  if (op === 'collectObject') allowed.add('fields');
   if (op === 'existsAll') allowed.add('match');
   if (op === 'existsAny' || op === 'count' || op === 'pickFirst') {
     // where only in first version
@@ -243,7 +278,7 @@ function validateAggregateOperator(op, args, targetPath, declaredSources) {
 function validateOperatorArgs(op, args, targetPath, declaredSources) {
   const loc = { operator: op, targetPath };
 
-  if (['collect', 'count', 'existsAny', 'existsAll', 'pickFirst'].includes(op)) {
+  if (['collect', 'collectObject', 'count', 'existsAny', 'existsAll', 'pickFirst'].includes(op)) {
     return validateAggregateOperator(op, args, targetPath, declaredSources);
   }
 

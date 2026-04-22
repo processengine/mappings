@@ -12,6 +12,7 @@
 
 Добавлен ограниченный DSL для массивов:
 - `collect`
+- `collectObject`
 - `count`
 - `existsAny`
 - `existsAll`
@@ -89,3 +90,26 @@
 - [COMPATIBILITY.md](./COMPATIBILITY.md)
 - [MIGRATION.md](./MIGRATION.md)
 - [CHANGELOG.md](./CHANGELOG.md)
+
+
+## `collectObject`
+
+`collectObject` selects array items from `from`, optionally filters them with `where`, and projects each selected item into a compact object using relative paths from `fields`. Unresolved fields are skipped. If all fields are unresolved for one selected item, that item is dropped from the output array.
+
+Example:
+
+```json
+{
+  "merchantErrors": {
+    "collectObject": {
+      "from": "sources.rules.issues[*]",
+      "where": { "field": "level", "equals": "ERROR" },
+      "fields": {
+        "code": "code",
+        "message": "message",
+        "field": "field"
+      }
+    }
+  }
+}
+```
