@@ -69,6 +69,8 @@ export function createTraceRecorder({ artifactId, level, redact }) {
       if (typeof entry.resultValue !== 'undefined') baseEvent.details.resultValue = entry.resultValue;
       if (typeof entry.resultLength !== 'undefined') baseEvent.details.resultLength = entry.resultLength;
       if (typeof entry.droppedCount !== 'undefined') baseEvent.details.droppedCount = entry.droppedCount;
+      if (typeof entry.droppedFieldCount !== 'undefined') baseEvent.details.droppedFieldCount = entry.droppedFieldCount;
+      if (typeof entry.partialObjectCount !== 'undefined') baseEvent.details.partialObjectCount = entry.partialObjectCount;
       if (typeof entry.picked !== 'undefined') baseEvent.details.picked = entry.picked;
       if (entry.details) Object.assign(baseEvent.details, entry.details);
       if (level === 'verbose') {

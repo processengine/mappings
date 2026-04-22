@@ -110,6 +110,7 @@ console.log(result.output);
 
 Supported aggregate operators:
 - `collect`
+- `collectObject`
 - `count`
 - `existsAny`
 - `existsAll`
@@ -254,3 +255,26 @@ Failures are surfaced through typed errors:
 ## Release line
 
 `2.1.x` is the current public feature line of `@processengine/mappings`.
+
+
+## `collectObject`
+
+`collectObject` selects array items from `from`, optionally filters them with `where`, and projects each selected item into a compact object using relative paths from `fields`. Unresolved fields are skipped. If all fields are unresolved for one selected item, that item is dropped from the output array.
+
+Example:
+
+```json
+{
+  "merchantErrors": {
+    "collectObject": {
+      "from": "sources.rules.issues[*]",
+      "where": { "field": "level", "equals": "ERROR" },
+      "fields": {
+        "code": "code",
+        "message": "message",
+        "field": "field"
+      }
+    }
+  }
+}
+```

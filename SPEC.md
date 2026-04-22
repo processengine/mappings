@@ -127,6 +127,7 @@ The first array DSL version is intentionally small. It exists to build compact f
 ### Supported aggregate operators
 
 - `collect`
+- `collectObject`
 - `count`
 - `existsAny`
 - `existsAll`
@@ -351,3 +352,26 @@ Out of scope in 2.1.x:
 - arbitrary expression DSL;
 - nested aggregate operators;
 - custom operators as the primary answer for array semantics.
+
+
+## `collectObject`
+
+`collectObject` selects array items from `from`, optionally filters them with `where`, and projects each selected item into a compact object using relative paths from `fields`. Unresolved fields are skipped. If all fields are unresolved for one selected item, that item is dropped from the output array.
+
+Example:
+
+```json
+{
+  "merchantErrors": {
+    "collectObject": {
+      "from": "sources.rules.issues[*]",
+      "where": { "field": "level", "equals": "ERROR" },
+      "fields": {
+        "code": "code",
+        "message": "message",
+        "field": "field"
+      }
+    }
+  }
+}
+```
