@@ -11,13 +11,13 @@ Declarative JSON mappings runtime for ProcessEngine.
 
 ## What this library is
 
-`mappings` is a small runtime for simple, explicit, declarative data transformation.
+`mappings` is a runtime for explicit, declarative data transformation.
 
 It is intended for tasks such as:
 - normalizing raw input into a stable structure;
-- building a payload for the next step in a process;
-- deriving small sets of normalized facts from source data;
-- keeping transformation logic outside of surrounding service code.
+- building payloads for the next step in a process;
+- deriving compact facts from source data;
+- keeping transformation logic out of surrounding service code.
 
 Inside the broader ProcessEngine family, `mappings` sits between raw data and the next layer that consumes normalized output.
 
@@ -25,11 +25,11 @@ Inside the broader ProcessEngine family, `mappings` sits between raw data and th
 
 `mappings` is not:
 - a general-purpose programming language;
-- a runtime for stateful processing;
+- a runtime for stateful orchestration;
 - a place for complex algorithmic logic;
 - a mechanism for external I/O, network calls, or side effects.
 
-If a task requires loops with arbitrary control flow, stateful orchestration, external calls, or substantial procedural logic, that task belongs in code or another explicit runtime boundary rather than in mapping DSL.
+If a task requires arbitrary loops, dynamic branching, stateful coordination, external calls, or substantial procedural logic, that task belongs in code or another explicit runtime boundary rather than in mapping DSL.
 
 ## Canonical API
 
@@ -48,8 +48,6 @@ Roles:
 - `validateMappings(...)` performs soft validation and returns `{ ok, diagnostics }` without throwing on invalid source.
 - `prepareMappings(...)` validates and prepares a runtime artifact. Invalid source causes `MappingsCompileError`.
 - `executeMappings(...)` executes only a prepared artifact. It does not perform hidden compile/prepare work.
-
-Legacy engine-style entrypoints such as `MappingEngine` and public `compile()` are not part of the public package API.
 
 ## Installation
 
@@ -79,12 +77,7 @@ const source = {
     'profile.country': {
       mapValue: {
         from: 'sources.raw.countryCode',
-        map: {
-          DE: 'DE',
-          DEU: 'DE',
-          FR: 'FR',
-          FRA: 'FR',
-        },
+        map: { DE: 'DE', DEU: 'DE', FR: 'FR', FRA: 'FR' },
         fallback: 'passthrough',
       },
     },
@@ -99,46 +92,128 @@ if (!validation.ok) {
 }
 
 const artifact = prepareMappings(source);
-
-const result = executeMappings(
-  artifact,
-  {
-    raw: {
-      fullName: '  Ada   Lovelace  ',
-      email: 'ADA@EXAMPLE.COM',
-      countryCode: 'DEU',
-      tags: ['math', 'notes'],
-    },
+const result = executeMappings(artifact, {
+  raw: {
+    fullName: '  Ada   Lovelace  ',
+    email: 'ADA@EXAMPLE.COM',
+    countryCode: 'DEU',
+    tags: ['math', 'notes'],
   },
-  { trace: 'basic' },
-);
+});
 
 console.log(result.output);
-// {
-//   profile: {
-//     displayName: 'Ada Lovelace',
-//     email: 'ada@example.com',
-//     country: 'DE',
-//     hasTags: true
-//   }
-// }
 ```
+
+## Limited array DSL in 2.1.x
+
+`2.1.x` adds a limited array DSL for building compact facts from multiplicity without pushing interpretation back into service code.
+
+Supported aggregate operators:
+- `collect`
+- `count`
+- `existsAny`
+- `existsAll`
+- `pickFirst`
+
+Supported simple comparators in `where` / `match`:
+- `equals`
+- `in`
+- `startsWith`
+
+### Example
+
+```js
+const source = {
+  mappingId: 'issues.to.facts.v1',
+  sources: {
+    rules: 'object',
+    findClient: 'object',
+  },
+  output: {
+    'facts.errorCount': {
+      count: {
+        from: 'sources.rules.issues[*]',
+        where: { field: 'level', equals: 'ERROR' },
+      },
+    },
+    'facts.warningCodes': {
+      collect: {
+        from: 'sources.rules.issues[*]',
+        where: { field: 'level', equals: 'WARNING' },
+        value: 'code',
+      },
+    },
+    'facts.hasException': {
+      existsAny: {
+        from: 'sources.rules.issues[*]',
+        where: { field: 'level', equals: 'EXCEPTION' },
+      },
+    },
+    'facts.foundClient': {
+      pickFirst: {
+        from: 'sources.findClient.clients[*]',
+      },
+    },
+  },
+};
+```
+
+### Intentional limits of first version
+
+This is not a general array language.
+
+First version intentionally does **not** support:
+- numeric indexes;
+- wildcard outside aggregate `from`;
+- nested wildcard;
+- `groupBy`, `mapEach`, `flatMap`, or general `reduce`;
+- `and / or / not` trees in conditions;
+- nested aggregates;
+- custom operators as the primary answer for array work.
+
+### Special cases
+
+- `collect([]) -> []`
+- `count([]) -> 0`
+- `existsAny([]) -> false`
+- `existsAll([]) -> true`
+- `pickFirst([]) -> null`
+
+`existsAll([]) -> true` is vacuous truth. In business flows it is usually safer to pair it with a companion fact such as `count > 0`.
+
+For `collect`, unresolved `value` on a selected element does not throw. The element is skipped and the skip count is reflected in trace as `droppedCount`.
+
+## Prepared artifact
+
+`prepareMappings(...)` now produces prepared artifact version `v2` with a compiled execution plan for runtime use.
+
+Publicly guaranteed:
+- artifact is suitable for `executeMappings(...)`;
+- artifact remains immutable from the consumer perspective;
+- public contract is still intentionally minimal.
+
+Internally:
+- `v2` carries compiled accessors / predicates / execution plan;
+- `v1` remains a legacy compatibility path for previously prepared artifacts.
 
 ## Trace
 
 Supported trace levels:
-
 - `false`
 - `'basic'`
 - `'verbose'`
 
 Trace is disabled by default.
 
-- `false` returns no trace.
-- `'basic'` returns compact execution events suitable for routine diagnostics.
-- `'verbose'` may include additional redacted input and output fragments for debugging and local inspection.
-
-Use the `redact` option to control masking of trace values.
+For array DSL, `basic` trace records one event per aggregate operator and includes compact fields such as:
+- `operator`
+- `from`
+- `selectedCount`
+- `resultType`
+- `resultValue` for boolean / number results
+- `resultLength` for `collect`
+- `droppedCount` for `collect`
+- `picked` for `pickFirst`
 
 ## Runtime contract
 
@@ -151,37 +226,15 @@ Use the `redact` option to control masking of trace values.
 }
 ```
 
-This is not a `success/error` status envelope.
-
 Failures are surfaced through typed errors:
 - `MappingsCompileError`
 - `MappingsRuntimeError`
 
-## Supported operators in v1
-
-Current source definitions support these operators:
-
-- `from`
-- `literal`
-- `exists`
-- `equals`
-- `coalesce`
-- `trim`
-- `lowercase`
-- `uppercase`
-- `normalizeSpaces`
-- `removeNonDigits`
-- `mapValue`
-- `transform`
-
-See the specification for source shape, operator constraints, runtime semantics, and limitations.
-
 ## Examples
-
-Repository examples are intentionally small but complete. They show source, validation, preparation, execution, output, and trace where relevant.
 
 - [`examples/README.md`](./examples/README.md)
 - [`examples/basic-transform.mjs`](./examples/basic-transform.mjs)
+- [`examples/array-dsl.mjs`](./examples/array-dsl.mjs)
 - [`examples/validate-diagnostics.mjs`](./examples/validate-diagnostics.mjs)
 - [`examples/runtime-error.mjs`](./examples/runtime-error.mjs)
 - [`examples/trace-basic.mjs`](./examples/trace-basic.mjs)
@@ -200,4 +253,4 @@ Repository examples are intentionally small but complete. They show source, vali
 
 ## Release line
 
-`2.x` is the canonical public release line of `@processengine/mappings`.
+`2.1.x` is the current public feature line of `@processengine/mappings`.

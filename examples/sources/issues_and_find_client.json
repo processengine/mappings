@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "issues": [
+      { "level": "ERROR", "code": "E1", "field": "beneficiary.contacts.phone" },
+      { "level": "WARNING", "code": "W1", "field": "beneficiary.address.city" },
+      { "level": "ERROR", "code": "E2", "field": "beneficiary.contacts.email" },
+      { "level": "EXCEPTION", "code": "X1", "field": "beneficiary.identity.inn" }
+    ]
+  },
+  "findClient": {
+    "clients": [
+      { "id": "C1", "cardLastModifiedAt": "2026-04-01T00:00:00Z" },
+      { "id": "C2" }
+    ]
+  }
+}

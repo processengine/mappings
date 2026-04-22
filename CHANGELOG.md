@@ -1,8 +1,45 @@
 # Changelog
 
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
-Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).  
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Compatibility policy: [COMPATIBILITY.md](COMPATIBILITY.md).
+
+---
+
+## [2.1.0] — 2026-04-22
+
+Feature release for limited array DSL and compiled prepared artifact `v2`.
+
+### Added
+
+- Limited array DSL operators:
+  - `collect`
+  - `count`
+  - `existsAny`
+  - `existsAll`
+  - `pickFirst`
+- Aggregate conditions with:
+  - `equals`
+  - `in`
+  - `startsWith`
+- Aggregate trace events with compact `basic` output and richer `verbose` output.
+- Prepared artifact `v2` with compiled execution plan.
+- Example mapping and sources for beneficiary-like `issues[*]` and `clients[*]` scenarios.
+- Array DSL tests for runtime semantics and validation warnings.
+- `RELEASE_NOTES_2.1.0.md`.
+
+### Changed
+
+- `prepareMappings(...)` now produces `v2` prepared artifacts.
+- `executeMappings(...)` supports `v2` compiled execution and retains `v1` legacy compatibility.
+- Schema updated to document aggregate operators and `pickFirst`.
+- README, SPEC, COMPATIBILITY, MIGRATION, examples, and changelog updated for the array DSL release.
+
+### Notes
+
+- This release intentionally keeps array support small and declarative.
+- Numeric indexes, nested wildcard, `groupBy`, `mapEach`, general `reduce`, and expression DSL remain out of scope.
+- `existsAll([]) -> true` is preserved as first-version vacuous truth semantics.
 
 ---
 
@@ -32,40 +69,8 @@ Documentation and examples release for the canonical `2.x` line.
 - Documentation examples rewritten to be neutral library examples rather than project-specific examples.
 - English and Russian documentation brought to the same semantic depth.
 
-### Notes
-
-- This release does not change package shape, canonical API, or runtime model.
-- The `2.0.0` release remains the first public canonical API release.
-
 ---
 
 ## [2.0.0] — 2026-04-06
 
 First public release of the canonical `@processengine/mappings` line.
-
-### Changed
-
-- Public API aligned with the ProcessEngine canon: `validateMappings(...)`, `prepareMappings(...)`, and `executeMappings(...)` are the normative public entrypoints.
-- Legacy API removed from public exports: `MappingEngine`, public `compile(...)`, and mixed runtime entrypoints are no longer part of the product contract.
-- Package moved to `ESM-first`, `dist-only`, explicit exports, and Node.js `>=20.19.0`.
-- `executeMappings(...)` now accepts only a prepared artifact and does not perform hidden compile work.
-- Prepared artifact formalized as a minimal public, opaque-ish runtime entity.
-
-### Added
-
-- `MappingsCompileError` and `MappingsRuntimeError` as typed compile/runtime errors.
-- `formatMappingsDiagnostics(...)` and `formatMappingsRuntimeError(...)` for CLI, logs, and debugging.
-- Canonical trace with `false | "basic" | "verbose"` and basic redaction support.
-- `MIGRATION.md` as the migration route from the old public API.
-- Contract tests, trace tests, pack/install tests, and regression coverage through the canonical API.
-
-### Documentation
-
-- README, specifications, compatibility notes, and migration guide rewritten for the canonical library form.
-
----
-
-## Before 2.0.0
-
-Before `2.0.0`, the library existed in a pre-canonical internal line built around `MappingEngine` and public `compile(...)`.
-The public canonical release line starts at `2.0.0`.
