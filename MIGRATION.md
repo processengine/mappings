@@ -65,3 +65,28 @@ After:
 const artifact = prepareMappings(sourceWithAggregates);
 const result = executeMappings(artifact, input, { trace: 'basic' });
 ```
+
+## Migrating to 2.3.0
+
+Version `2.3.0` adds `joinNonEmpty` and `template` for compiled string assembly.
+
+No migration is required for existing mappings.
+
+To replace host-service or form-side string assembly, move deterministic string construction into mapping artifacts:
+
+```json
+{
+  "fullAddress": {
+    "joinNonEmpty": {
+      "separator": ", ",
+      "items": [
+        { "from": "sources.address.postalCode" },
+        { "from": "sources.address.regionName" },
+        { "template": "г {{city}}", "vars": { "city": { "from": "sources.address.city" } } }
+      ]
+    }
+  }
+}
+```
+
+Do not make optional source fields mandatory in business rules only because a downstream DTO requires a string representation. Prefer deriving the string in mappings.

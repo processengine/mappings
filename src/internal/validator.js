@@ -11,6 +11,7 @@ const SUPPORTED_OPERATORS = new Set([
   'trim', 'lowercase', 'uppercase', 'normalizeSpaces', 'removeNonDigits',
   'mapValue', 'transform',
   'collect', 'collectObject', 'count', 'existsAny', 'existsAll', 'pickFirst',
+  'joinNonEmpty', 'template',
 ]);
 
 const STRING_ROOT_OPERATORS = new Set([
@@ -111,6 +112,137 @@ function validateFallback(fallback, context, location) {
     );
   }
   return null;
+}
+
+
+function validateBooleanOption(value, name, context, location) {
+  if (typeof value !== 'boolean') {
+    return makeDiagnostic('INVALID_ARGS', `${name} must be a boolean in "${context}"`, location);
+  }
+  return null;
+}
+
+function validateStringExpression(expr, context, declaredSources, location = {}) {
+  if (!isPlainObject(expr)) {
+    return [makeDiagnostic('INVALID_ARGS', `String expression must be a plain object in "${context}"`, location)];
+  }
+
+  // Template expression form: { template: "...", vars: {...}, ... }.
+  if (Object.prototype.hasOwnProperty.call(expr, 'template') && typeof expr.template === 'string') {
+    return validateTemplateExpression(expr, context, declaredSources, location);
+  }
+
+  const keys = Object.keys(expr);
+  if (keys.length !== 1) {
+    return [makeDiagnostic('INVALID_ARGS', `String expression must contain exactly one operator in "${context}"`, location)];
+  }
+
+  const op = keys[0];
+  const args = expr[op];
+
+  if (op === 'from' || op === 'path') {
+    if (typeof args !== 'string') return [makeDiagnostic('INVALID_ARGS', `${op} expression expects a path string in "${context}"`, location)];
+    const err = validateSourcePath(args, context, declaredSources, { ...location, from: args });
+    return err ? [err] : [];
+  }
+
+  if (op === 'literal') {
+    return isJsonSafeLiteral(args) ? [] : [literalTypeError(context, location)];
+  }
+
+  if (op === 'coalesce') {
+    return validateCoalesceCandidates(args, context, declaredSources, location);
+  }
+
+  if (op === 'joinNonEmpty') {
+    return validateJoinNonEmptyExpression(args, context, declaredSources, location);
+  }
+
+  return [makeDiagnostic('UNKNOWN_OPERATOR', `Unknown string expression operator '${op}' in "${context}"`, { ...location, operator: op })];
+}
+
+function validateJoinNonEmptyExpression(args, context, declaredSources, location = {}) {
+  const loc = { ...location, operator: 'joinNonEmpty' };
+  const diagnostics = [];
+  if (!isPlainObject(args)) {
+    return [makeDiagnostic('INVALID_JOIN_NON_EMPTY_SHAPE', `joinNonEmpty expects an object in "${context}"`, loc)];
+  }
+  if (!Array.isArray(args.items)) {
+    diagnostics.push(makeDiagnostic('JOIN_NON_EMPTY_ITEMS_MUST_BE_ARRAY', `joinNonEmpty.items must be an array in "${context}"`, loc));
+  } else if (args.items.length === 0) {
+    diagnostics.push(makeDiagnostic('JOIN_NON_EMPTY_ITEMS_EMPTY', `joinNonEmpty.items must not be empty in "${context}"`, loc));
+  } else {
+    args.items.forEach((item, index) => diagnostics.push(...validateStringExpression(item, `${context}.items[${index}]`, declaredSources, { ...loc, itemIndex: index })));
+  }
+  if ('separator' in args && typeof args.separator !== 'string') diagnostics.push(makeDiagnostic('JOIN_NON_EMPTY_SEPARATOR_MUST_BE_STRING', `joinNonEmpty.separator must be a string in "${context}"`, loc));
+  for (const name of ['trimItems', 'trimResult', 'emptyAsNull']) {
+    if (name in args) {
+      const err = validateBooleanOption(args[name], `joinNonEmpty.${name}`, context, loc);
+      if (err) diagnostics.push(err);
+    }
+  }
+  const allowed = new Set(['separator', 'items', 'trimItems', 'trimResult', 'emptyAsNull']);
+  for (const key of Object.keys(args)) {
+    if (!allowed.has(key)) diagnostics.push(makeDiagnostic('INVALID_ARGS', `Unsupported field "${key}" for joinNonEmpty in "${context}"`, { ...loc, field: key }));
+  }
+  return diagnostics;
+}
+
+function extractTemplateVarNames(template) {
+  const names = [];
+  const validRe = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+  let match;
+  while ((match = validRe.exec(template)) !== null) names.push(match[1]);
+  const allBraces = template.match(/\{\{[^}]*\}\}/g) ?? [];
+  if (allBraces.length !== names.length) return { names, invalid: true };
+  return { names, invalid: false };
+}
+
+function validateTemplateExpression(args, context, declaredSources, location = {}) {
+  const loc = { ...location, operator: 'template' };
+  const diagnostics = [];
+  if (!isPlainObject(args)) return [makeDiagnostic('INVALID_TEMPLATE_SHAPE', `template expects an object in "${context}"`, loc)];
+  if (typeof args.template !== 'string') {
+    diagnostics.push(makeDiagnostic('TEMPLATE_STRING_REQUIRED', `template.template must be a string in "${context}"`, loc));
+  }
+  const vars = args.vars ?? {};
+  if (!isPlainObject(vars)) {
+    diagnostics.push(makeDiagnostic('TEMPLATE_VARS_MUST_BE_OBJECT', `template.vars must be an object in "${context}"`, loc));
+  }
+  if (typeof args.template === 'string' && isPlainObject(vars)) {
+    const parsed = extractTemplateVarNames(args.template);
+    if (parsed.invalid) diagnostics.push(makeDiagnostic('TEMPLATE_VAR_NAME_INVALID', `template contains invalid variable placeholder in "${context}"`, loc));
+    for (const name of Object.keys(vars)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) diagnostics.push(makeDiagnostic('TEMPLATE_VAR_NAME_INVALID', `template var name "${name}" is invalid in "${context}"`, { ...loc, varName: name }));
+      diagnostics.push(...validateStringExpression(vars[name], `${context}.vars.${name}`, declaredSources, { ...loc, varName: name }));
+    }
+    for (const name of parsed.names) {
+      if (!Object.prototype.hasOwnProperty.call(vars, name)) diagnostics.push(makeDiagnostic('TEMPLATE_VAR_MISSING', `template var "${name}" is used but not defined in "${context}"`, { ...loc, varName: name }));
+    }
+  }
+  for (const name of ['trimResult', 'emptyAsNull', 'skipIfAnyVarEmpty']) {
+    if (name in args) {
+      const err = validateBooleanOption(args[name], `template.${name}`, context, loc);
+      if (err) diagnostics.push(err);
+    }
+  }
+  const allowed = new Set(['template', 'vars', 'trimResult', 'emptyAsNull', 'skipIfAnyVarEmpty']);
+  for (const key of Object.keys(args)) {
+    if (!allowed.has(key)) diagnostics.push(makeDiagnostic('INVALID_ARGS', `Unsupported field "${key}" for template in "${context}"`, { ...loc, field: key }));
+  }
+  return diagnostics;
+}
+
+function validateCoalesceCandidates(args, context, declaredSources, location) {
+  if (!Array.isArray(args) || args.length < 1 || args.length > 8) {
+    return [makeDiagnostic('INVALID_ARGS', `Operator 'coalesce' expects 1–8 candidates in "${context}"`, location)];
+  }
+  const diagnostics = [];
+  for (let i = 0; i < args.length; i++) {
+    const cand = args[i];
+    diagnostics.push(...validateStringExpression(cand, `${context}.coalesce[${i}]`, declaredSources, { ...location, candidateIndex: i }));
+  }
+  return diagnostics;
 }
 
 function validateTransformStep(step, stepIndex, targetPath) {
@@ -312,31 +444,8 @@ function validateOperatorArgs(op, args, targetPath, declaredSources) {
       return diagnostics;
     }
 
-    case 'coalesce': {
-      if (!Array.isArray(args) || args.length < 1 || args.length > 4) {
-        return [makeDiagnostic('INVALID_ARGS', `Operator 'coalesce' expects 1–4 candidates in "${targetPath}"`, loc)];
-      }
-      const diagnostics = [];
-      for (let i = 0; i < args.length; i++) {
-        const cand = args[i];
-        if (!isPlainObject(cand)) {
-          diagnostics.push(makeDiagnostic('INVALID_ARGS', `Coalesce candidate [${i}] must be a plain object in "${targetPath}"`, loc));
-          continue;
-        }
-        const keys = Object.keys(cand);
-        if (keys.length !== 1 || (!('path' in cand) && !('literal' in cand))) {
-          diagnostics.push(makeDiagnostic('INVALID_ARGS', `Coalesce candidate [${i}] must have exactly one key: "path" or "literal" in "${targetPath}"`, loc));
-          continue;
-        }
-        if ('path' in cand) {
-          const pathErr = validateSourcePath(cand.path, targetPath, declaredSources, loc);
-          if (pathErr) diagnostics.push(pathErr);
-        } else if (!isJsonSafeLiteral(cand.literal)) {
-          diagnostics.push(makeDiagnostic('INVALID_ARGS', `Coalesce literal candidate [${i}] must be a JSON-safe value in "${targetPath}"`, loc));
-        }
-      }
-      return diagnostics;
-    }
+    case 'coalesce':
+      return validateCoalesceCandidates(args, targetPath, declaredSources, loc);
 
     case 'mapValue': {
       if (!isPlainObject(args)) {
@@ -356,6 +465,12 @@ function validateOperatorArgs(op, args, targetPath, declaredSources) {
       }
       return diagnostics;
     }
+
+    case 'joinNonEmpty':
+      return validateJoinNonEmptyExpression(args, targetPath, declaredSources, loc);
+
+    case 'template':
+      return validateTemplateExpression(args, targetPath, declaredSources, loc);
 
     case 'transform': {
       if (!isPlainObject(args)) {

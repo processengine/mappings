@@ -88,3 +88,13 @@ Breaking changes include:
 ## 2.2.0 additive DSL change
 
 Version 2.2.0 adds the non-breaking aggregate operator `collectObject`. Existing prepared artifacts and mapping sources remain valid.
+
+## 2.3.0 string expressions compatibility
+
+`joinNonEmpty` and `template` are backward-compatible additions to the source DSL.
+
+- Existing artifacts continue to work unchanged.
+- New string operators require `PreparedMappingsArtifact v2`.
+- The legacy `v1` execution path does not support these operators.
+- Runtime results of the new operators are transport-safe and JSON-safe: `string` or `null`.
+- `coalesce` treats `null` from `joinNonEmpty` as an empty candidate and continues to the next candidate.

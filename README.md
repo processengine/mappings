@@ -278,3 +278,42 @@ Example:
   }
 }
 ```
+
+## String expressions: `joinNonEmpty` and `template`
+
+Since `2.3.0`, mappings supports compiled string expressions for deterministic string assembly.
+
+```json
+{
+  "mappingId": "address.fullAddress.v1",
+  "sources": { "address": "object" },
+  "output": {
+    "fullAddress": {
+      "joinNonEmpty": {
+        "separator": ", ",
+        "items": [
+          { "from": "sources.address.postalCode" },
+          { "from": "sources.address.regionName" },
+          {
+            "template": "г {{city}}",
+            "vars": {
+              "city": { "from": "sources.address.city" }
+            }
+          },
+          {
+            "joinNonEmpty": {
+              "separator": " ",
+              "items": [
+                { "from": "sources.address.streetType" },
+                { "from": "sources.address.street" }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+The operators are compiled into `PreparedMappingsArtifact v2`. Runtime execution does not parse paths or perform hidden compile. Results are transport-safe: `string` or `null`.

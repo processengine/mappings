@@ -52,7 +52,16 @@ export function executeMappingsInternal(artifact, input, options = {}) {
   const runtimeResult = { output: {} };
 
   if (artifact.version === 'v2' && artifact.getCompiledPlan()) {
-    const executed = executeCompiledPlan(artifact.getCompiledPlan(), input);
+    let executed;
+    try {
+      executed = executeCompiledPlan(artifact.getCompiledPlan(), input);
+    } catch (cause) {
+      throw new MappingsRuntimeError(cause instanceof Error ? cause.message : 'Failed to execute compiled mappings plan.', {
+        code: 'MAPPINGS_RUNTIME_ERROR',
+        details: { phase: 'execute', artifactVersion: artifact.version },
+        cause,
+      });
+    }
     runtimeResult.output = executed.output;
     if (captureTrace) {
       const recorder = createTraceRecorder({ artifactId: artifact.mappingId, level: traceLevel, redact: options.redact });

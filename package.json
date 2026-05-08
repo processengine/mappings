@@ -1,6 +1,6 @@
 {
   "name": "@processengine/mappings",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Declarative JSON mappings runtime for ProcessEngine",
   "type": "module",
   "main": "./dist/index.js",
@@ -31,6 +31,7 @@
     "RELEASE_NOTES_2.0.1.md",
     "RELEASE_NOTES_2.1.0.md",
     "RELEASE_NOTES_2.2.0.md",
+    "RELEASE_NOTES_2.3.0.md",
     "LICENSE"
   ],
   "scripts": {
@@ -38,7 +39,10 @@
     "pretest": "npm run build",
     "test": "node --test test/*.test.js",
     "test:pack": "node ./scripts/pack-install-test.mjs",
-    "bench": "node benchmarks/run.mjs"
+    "bench": "node benchmarks/run.mjs",
+    "release:check": "npm test && npm run test:pack",
+    "prepublishOnly": "echo 'Publish only via GitHub Actions. See release workflow.' && exit 1",
+    "version": "git add CHANGELOG.md package-lock.json package.json"
   },
   "engines": {
     "node": ">=20.19.0"
@@ -60,5 +64,8 @@
   "homepage": "https://github.com/processengine/mappings#readme",
   "bugs": {
     "url": "https://github.com/processengine/mappings/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

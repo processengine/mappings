@@ -375,3 +375,105 @@ Example:
   }
 }
 ```
+
+---
+
+## String expression DSL (`joinNonEmpty` and `template`) — v2
+
+Version `2.3.0` adds two compiled string expression operators for deterministic JSON-safe string assembly.
+
+### `joinNonEmpty`
+
+`joinNonEmpty` joins non-empty scalar expression results with a separator. It skips `null`, missing paths, empty strings and whitespace-only strings. Numbers and booleans are converted to strings. Objects and arrays are rejected as non-scalar values.
+
+```json
+{
+  "joinNonEmpty": {
+    "separator": ", ",
+    "items": [
+      { "from": "sources.address.postalCode" },
+      { "from": "sources.address.regionName" },
+      {
+        "template": "г {{city}}",
+        "vars": {
+          "city": { "from": "sources.address.city" }
+        }
+      }
+    ]
+  }
+}
+```
+
+Defaults:
+
+```text
+separator = ""
+trimItems = true
+trimResult = true
+emptyAsNull = true
+```
+
+If all items are empty, the operator returns `null`.
+
+### `template`
+
+`template` renders a string with named variables. Variables are mapping expressions.
+
+There are two syntactic contexts for `template`:
+
+- inside expression lists, such as `joinNonEmpty.items`, use the inline expression form;
+- at the `output` rule root, wrap the expression in the operator key.
+
+Inline expression form:
+
+```json
+{
+  "template": "д {{house}}",
+  "vars": {
+    "house": { "from": "sources.address.house" }
+  }
+}
+```
+
+Output rule form:
+
+```json
+{
+  "output": {
+    "houseLabel": {
+      "template": {
+        "template": "д {{house}}",
+        "vars": {
+          "house": { "from": "sources.address.house" }
+        }
+      }
+    }
+  }
+}
+```
+
+Defaults:
+
+```text
+skipIfAnyVarEmpty = true
+trimResult = true
+emptyAsNull = true
+```
+
+With `skipIfAnyVarEmpty = true`, any missing/null/empty variable makes the whole template return `null`. This prevents values like `"кв"` when `apartment` is absent.
+
+### Composition
+
+`template` can be used inside `joinNonEmpty.items`. `joinNonEmpty` can be used inside `coalesce`. If `joinNonEmpty` returns `null`, `coalesce` continues to the next candidate.
+
+### Compile-first requirement
+
+`joinNonEmpty` and `template` are compiled into the `PreparedMappingsArtifact v2` execution plan during `prepareMappings(...)`. Runtime execution must not parse paths, run `split('.')` in the hot path, or perform hidden compile on first use.
+
+### Transport-safe output
+
+The new operators return only `string` or `null`. They never return `undefined`, functions, class instances, `Symbol`, `BigInt`, `Date`, arrays, objects or cyclic values.
+
+### Address example
+
+The intended project use case is assembling a technical `fullAddress` for downstream ABS/CFT DTOs from a FIAS-structured address, without making `addressLine` mandatory in business rules.

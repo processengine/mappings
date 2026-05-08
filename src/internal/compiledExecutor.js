@@ -1,5 +1,119 @@
 import { deepCopy, setTargetPath } from './path.js';
 
+function scalarToString(value, context) {
+  if (value === null || typeof value === 'undefined') return { ok: true, empty: true, value: null };
+  const t = typeof value;
+  if (t === 'string') return { ok: true, empty: value.trim() === '', value };
+  if (t === 'number') {
+    if (!Number.isFinite(value)) return { ok: false, message: `${context} must be scalar JSON-safe string/number/boolean/null` };
+    return { ok: true, empty: false, value: String(value) };
+  }
+  if (t === 'boolean') return { ok: true, empty: false, value: String(value) };
+  return { ok: false, message: `${context} must be scalar JSON-safe string/number/boolean/null` };
+}
+
+function evalExpression(expr, sources) {
+  switch (expr.kind) {
+    case 'from': {
+      const resolution = expr.accessor.resolve(sources);
+      return { resolved: resolution.resolved, value: resolution.resolved ? deepCopy(resolution.value) : null, empty: !resolution.resolved || resolution.value === null };
+    }
+    case 'literal':
+      return { resolved: true, value: expr.value, empty: expr.value === null };
+    case 'coalesce': {
+      const candidates = [];
+      for (let i = 0; i < expr.candidates.length; i++) {
+        const result = evalExpression(expr.candidates[i], sources);
+        candidates.push({ index: i, resolved: result.resolved, empty: result.empty });
+        if (result.resolved && result.value !== null && typeof result.value !== 'undefined') {
+          return { resolved: true, value: result.value, empty: false, candidates, selectedIndex: i };
+        }
+      }
+      return { resolved: false, value: null, empty: true, candidates, selectedIndex: null };
+    }
+    case 'joinNonEmpty': {
+      const parts = [];
+      let emptyItemCount = 0;
+      for (const item of expr.items) {
+        const result = evalExpression(item, sources);
+        if (!result.resolved || result.value === null || typeof result.value === 'undefined') {
+          emptyItemCount += 1;
+          continue;
+        }
+        const scalar = scalarToString(result.value, 'joinNonEmpty item result');
+        if (!scalar.ok) throw new TypeError(scalar.message);
+        let value = scalar.value;
+        if (expr.trimItems && typeof value === 'string') value = value.trim();
+        if (value === '') {
+          emptyItemCount += 1;
+          continue;
+        }
+        parts.push(value);
+      }
+      let joined = parts.join(expr.separator);
+      if (expr.trimResult) joined = joined.trim();
+      if (joined === '' && expr.emptyAsNull) joined = null;
+      return {
+        resolved: true,
+        value: joined,
+        empty: joined === null || joined === '',
+        details: { itemsCount: expr.items.length, selectedItemsCount: parts.length, emptyItemCount },
+      };
+    }
+    case 'template': {
+      const values = new Map();
+      let missingVarsCount = 0;
+      for (const token of expr.tokens) {
+        if (token.type !== 'var' || values.has(token.name)) continue;
+        const result = evalExpression(token.expression, sources);
+        if (!result.resolved || result.value === null || typeof result.value === 'undefined') {
+          missingVarsCount += 1;
+          values.set(token.name, '');
+          continue;
+        }
+        const scalar = scalarToString(result.value, `template var "${token.name}" result`);
+        if (!scalar.ok) throw new TypeError(scalar.message);
+        const value = typeof scalar.value === 'string' ? scalar.value.trim() : scalar.value;
+        if (value === '') missingVarsCount += 1;
+        values.set(token.name, value);
+      }
+      if (expr.skipIfAnyVarEmpty && missingVarsCount > 0) {
+        return { resolved: true, value: null, empty: true, details: { varsCount: Object.keys(expr.vars).length, missingVarsCount } };
+      }
+      let rendered = '';
+      for (const token of expr.tokens) {
+        rendered += token.type === 'literal' ? token.value : (values.get(token.name) ?? '');
+      }
+      if (expr.trimResult) rendered = rendered.trim();
+      if (rendered === '' && expr.emptyAsNull) rendered = null;
+      return { resolved: true, value: rendered, empty: rendered === null || rendered === '', details: { varsCount: Object.keys(expr.vars).length, missingVarsCount } };
+    }
+    default:
+      throw new TypeError(`Unsupported compiled expression kind: ${expr.kind}`);
+  }
+}
+
+function runExpressionRule(rule, sources) {
+  const result = evalExpression(rule.expression, sources);
+  return {
+    outputCreated: result.resolved,
+    outputValue: result.resolved ? result.value : undefined,
+    traceEntry: {
+      kind: 'mapping.rule',
+      target: rule.targetPath,
+      operator: rule.op,
+      outcome: result.resolved ? 'applied' : 'skipped',
+      details: {
+        resultType: result.value === null ? 'null' : typeof result.value,
+        resultIsEmpty: Boolean(result.empty),
+        ...(result.details ?? {}),
+        ...(typeof result.selectedIndex !== 'undefined' ? { selectedIndex: result.selectedIndex } : {}),
+      },
+      output: result.resolved ? result.value : undefined,
+    },
+  };
+}
+
 function applyStringTransform(op, str) {
   switch (op) {
     case 'trim': return str.trim();
@@ -274,7 +388,7 @@ export function executeCompiledPlan(plan, sources) {
   const output = {};
   const trace = [];
   for (const rule of plan.rules) {
-    const executed = rule.kind === 'aggregate' ? runAggregateRule(rule, sources) : runLegacyRule(rule, sources);
+    const executed = rule.kind === 'aggregate' ? runAggregateRule(rule, sources) : (rule.kind === 'expression' ? runExpressionRule(rule, sources) : runLegacyRule(rule, sources));
     if (executed.outputCreated) {
       setTargetPath(output, rule.targetPath, executed.outputValue);
     }

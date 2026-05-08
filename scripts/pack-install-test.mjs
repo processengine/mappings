@@ -9,7 +9,7 @@ const tarballName = execFileSync('npm', ['pack'], { cwd: root, encoding: 'utf8' 
 const tarballPath = join(root, tarballName);
 
 writeFileSync(join(workdir, 'package.json'), JSON.stringify({ name: 'install-fixture', private: true, type: 'module' }, null, 2));
-execFileSync('npm', ['install', tarballPath], { cwd: workdir, stdio: 'inherit' });
+execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', tarballPath], { cwd: workdir, stdio: 'inherit' });
 const script = `
 import { validateMappings, prepareMappings, executeMappings } from '@processengine/mappings';
 const source = { mappingId: 'pack.test', sources: { a: 'object' }, output: { value: { from: 'sources.a.value' } } };

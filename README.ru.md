@@ -113,3 +113,42 @@ Example:
   }
 }
 ```
+
+## Строковые выражения: `joinNonEmpty` и `template`
+
+Начиная с `2.3.0`, mappings поддерживает compiled string expressions для детерминированной сборки строк.
+
+```json
+{
+  "mappingId": "address.fullAddress.v1",
+  "sources": { "address": "object" },
+  "output": {
+    "fullAddress": {
+      "joinNonEmpty": {
+        "separator": ", ",
+        "items": [
+          { "from": "sources.address.postalCode" },
+          { "from": "sources.address.regionName" },
+          {
+            "template": "г {{city}}",
+            "vars": {
+              "city": { "from": "sources.address.city" }
+            }
+          },
+          {
+            "joinNonEmpty": {
+              "separator": " ",
+              "items": [
+                { "from": "sources.address.streetType" },
+                { "from": "sources.address.street" }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+Операторы компилируются в `PreparedMappingsArtifact v2`. Runtime не парсит пути и не делает hidden compile. Результат transport-safe: `string` или `null`.

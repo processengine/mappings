@@ -119,9 +119,109 @@ function compileTransformStep(step) {
   return { op, args: cloneJsonSafe(args) };
 }
 
+function compileTemplateTokens(template, vars) {
+  const tokens = [];
+  const re = /\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g;
+  let last = 0;
+  let match;
+  while ((match = re.exec(template)) !== null) {
+    if (match.index > last) tokens.push({ type: 'literal', value: template.slice(last, match.index) });
+    tokens.push({ type: 'var', name: match[1], expression: compileExpression(vars[match[1]]) });
+    last = match.index + match[0].length;
+  }
+  if (last < template.length) tokens.push({ type: 'literal', value: template.slice(last) });
+  return tokens;
+}
+
+export function compileExpression(expr) {
+  if (!isPlainObject(expr)) throw new Error('Expression must be a plain object');
+  if (Object.prototype.hasOwnProperty.call(expr, 'template') && typeof expr.template === 'string') {
+    return compileTemplateExpression(expr);
+  }
+  const keys = Object.keys(expr);
+  if (keys.length !== 1) throw new Error('Expression must contain exactly one operator');
+  const op = keys[0];
+  const args = expr[op];
+  switch (op) {
+    case 'from':
+      return { kind: 'from', accessor: compileSourcePathAccessor(args), path: args };
+    case 'path':
+      return { kind: 'from', accessor: compileSourcePathAccessor(args), path: args };
+    case 'literal':
+      return { kind: 'literal', value: cloneJsonSafe(args) };
+    case 'coalesce':
+      return { kind: 'coalesce', candidates: args.map(compileExpression) };
+    case 'joinNonEmpty':
+      return {
+        kind: 'joinNonEmpty',
+        separator: args.separator ?? '',
+        items: args.items.map(compileExpression),
+        trimItems: args.trimItems ?? true,
+        trimResult: args.trimResult ?? true,
+        emptyAsNull: args.emptyAsNull ?? true,
+      };
+    default:
+      throw new Error(`Unsupported expression operator for compile: ${op}`);
+  }
+}
+
+function compileTemplateExpression(args) {
+  return {
+    kind: 'template',
+    template: args.template,
+    tokens: compileTemplateTokens(args.template, args.vars ?? {}),
+    vars: Object.fromEntries(Object.entries(args.vars ?? {}).map(([key, value]) => [key, compileExpression(value)])),
+    skipIfAnyVarEmpty: args.skipIfAnyVarEmpty ?? true,
+    trimResult: args.trimResult ?? true,
+    emptyAsNull: args.emptyAsNull ?? true,
+  };
+}
+
+function compileOutputExpression(op, args) {
+  if (op === 'from') return { kind: 'from', accessor: compileSourcePathAccessor(args), path: args };
+  if (op === 'literal') return { kind: 'literal', value: cloneJsonSafe(args) };
+  if (op === 'coalesce') return { kind: 'coalesce', candidates: args.map(compileExpression) };
+  if (op === 'joinNonEmpty') {
+    return {
+      kind: 'joinNonEmpty',
+      separator: args.separator ?? '',
+      items: args.items.map(compileExpression),
+      trimItems: args.trimItems ?? true,
+      trimResult: args.trimResult ?? true,
+      emptyAsNull: args.emptyAsNull ?? true,
+    };
+  }
+  if (op === 'template') return compileTemplateExpression(args);
+  return null;
+}
+
+function isLegacyCoalesceCandidate(candidate) {
+  if (!isPlainObject(candidate)) return false;
+  const keys = Object.keys(candidate);
+  return keys.length === 1 && (keys[0] === 'path' || keys[0] === 'literal');
+}
+
 function compileLegacyRule(targetPath, op, args) {
   switch (op) {
     case 'from':
+      return { kind: 'legacy', targetPath, op, accessor: compileSourcePathAccessor(args) };
+    case 'literal':
+      return { kind: 'legacy', targetPath, op, value: cloneJsonSafe(args) };
+    case 'coalesce':
+      if (args.every(isLegacyCoalesceCandidate)) {
+        return {
+          kind: 'legacy',
+          targetPath,
+          op,
+          candidates: args.map((cand) => ('path' in cand
+            ? { kind: 'path', accessor: compileSourcePathAccessor(cand.path), path: cand.path }
+            : { kind: 'literal', value: cloneJsonSafe(cand.literal) })),
+        };
+      }
+      return { kind: 'expression', targetPath, op, expression: compileOutputExpression(op, args) };
+    case 'joinNonEmpty':
+    case 'template':
+      return { kind: 'expression', targetPath, op, expression: compileOutputExpression(op, args) };
     case 'exists':
     case 'trim':
     case 'lowercase':
@@ -129,19 +229,8 @@ function compileLegacyRule(targetPath, op, args) {
     case 'normalizeSpaces':
     case 'removeNonDigits':
       return { kind: 'legacy', targetPath, op, accessor: compileSourcePathAccessor(args) };
-    case 'literal':
-      return { kind: 'legacy', targetPath, op, value: cloneJsonSafe(args) };
     case 'equals':
       return { kind: 'legacy', targetPath, op, accessor: compileSourcePathAccessor(args[0]), expected: cloneJsonSafe(args[1]) };
-    case 'coalesce':
-      return {
-        kind: 'legacy',
-        targetPath,
-        op,
-        candidates: args.map((cand) => ('path' in cand
-          ? { kind: 'path', accessor: compileSourcePathAccessor(cand.path), path: cand.path }
-          : { kind: 'literal', value: cloneJsonSafe(cand.literal) })),
-      };
     case 'mapValue':
       return {
         kind: 'legacy',
@@ -192,6 +281,7 @@ export function compileDefinition(definition) {
   }
   return {
     kind: 'compiledPlan',
+    version: 'v2',
     rules,
   };
 }

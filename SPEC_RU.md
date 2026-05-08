@@ -172,3 +172,105 @@ Example:
   }
 }
 ```
+
+---
+
+## Строковый DSL (`joinNonEmpty` и `template`) — v2
+
+В версии `2.3.0` добавлены два compiled string expression оператора для детерминированной JSON-safe сборки строк.
+
+### `joinNonEmpty`
+
+`joinNonEmpty` склеивает непустые scalar-значения через разделитель. Оператор пропускает `null`, отсутствующие пути, пустые строки и строки из пробелов. Числа и boolean приводятся к строке. Объекты и массивы запрещены как non-scalar значения.
+
+```json
+{
+  "joinNonEmpty": {
+    "separator": ", ",
+    "items": [
+      { "from": "sources.address.postalCode" },
+      { "from": "sources.address.regionName" },
+      {
+        "template": "г {{city}}",
+        "vars": {
+          "city": { "from": "sources.address.city" }
+        }
+      }
+    ]
+  }
+}
+```
+
+Значения по умолчанию:
+
+```text
+separator = ""
+trimItems = true
+trimResult = true
+emptyAsNull = true
+```
+
+Если все элементы пустые, оператор возвращает `null`.
+
+### `template`
+
+`template` формирует строку по шаблону с именованными переменными. Переменные задаются mapping expressions.
+
+У `template` есть два синтаксических контекста:
+
+- внутри списков выражений, например `joinNonEmpty.items`, используется inline-форма expression;
+- в корне output rule выражение нужно обернуть в ключ оператора.
+
+Inline-форма expression:
+
+```json
+{
+  "template": "д {{house}}",
+  "vars": {
+    "house": { "from": "sources.address.house" }
+  }
+}
+```
+
+Форма для output rule:
+
+```json
+{
+  "output": {
+    "houseLabel": {
+      "template": {
+        "template": "д {{house}}",
+        "vars": {
+          "house": { "from": "sources.address.house" }
+        }
+      }
+    }
+  }
+}
+```
+
+Значения по умолчанию:
+
+```text
+skipIfAnyVarEmpty = true
+trimResult = true
+emptyAsNull = true
+```
+
+При `skipIfAnyVarEmpty = true` любая пустая переменная делает результат всего шаблона равным `null`. Это не даёт получить значения вроде `"кв"`, если квартира не передана.
+
+### Композиция
+
+`template` можно использовать внутри `joinNonEmpty.items`. `joinNonEmpty` можно использовать внутри `coalesce`. Если `joinNonEmpty` вернул `null`, `coalesce` продолжает проверять следующий кандидат.
+
+### Compile-first требование
+
+`joinNonEmpty` и `template` компилируются в execution plan `PreparedMappingsArtifact v2` на этапе `prepareMappings(...)`. Runtime не должен парсить path-строки, выполнять `split('.')` в hot path или делать hidden compile при первом вызове.
+
+### Transport-safe output
+
+Новые операторы возвращают только `string` или `null`. Они не возвращают `undefined`, функции, class instances, `Symbol`, `BigInt`, `Date`, массивы, объекты или циклические значения.
+
+### Пример с адресом
+
+Основной прикладной кейс — сборка технического `fullAddress` для DTO АБС/ЦФТ из ФИАС-раскладки адреса без превращения `addressLine` в обязательное business-rules поле.

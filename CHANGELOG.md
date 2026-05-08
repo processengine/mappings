@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+## [2.3.0] — 2026-05-08
+
+### Added
+- Added compiled string expression operators `joinNonEmpty` and `template`.
+- Added support for string expressions inside `coalesce`, including `joinNonEmpty` returning `null` so `coalesce` continues to the next candidate.
+- Added unit and integration tests for assembling `fullAddress` from FIAS address parts.
+- Added release workflow for tag-based npm publication and GitHub Releases.
+
+### Changed
+- Extended prepared artifact `v2` compiled execution plan with string expression nodes.
+- Updated schema and documentation for string operators, transport-safe output and release process.
+- Raised package version to `2.3.0`.
+
+### Compatibility
+- Non-breaking for existing mappings artifacts.
+- New string operators require prepared artifact `v2`; legacy `v1` execution does not support them.
+
 ## 2.2.0
 
 ### Added
