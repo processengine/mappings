@@ -8,12 +8,16 @@
 - `prepareMappings(source)` — подготовка артефакта, на ошибке бросает `MappingsCompileError`
 - `executeMappings(artifact, input, options?)` — исполнение только подготовленного артефакта
 
-## Что нового в 2.1.x
+## Ограниченный DSL для массивов
 
-Добавлен ограниченный DSL для массивов:
+В `2.1.x` добавлен ограниченный DSL для массивов. В `2.4.0` добавлены два boolean-helper для частых проверок порога и наличия scalar-значения.
+
+Поддерживаемые aggregate-операторы:
 - `collect`
 - `collectObject`
 - `count`
+- `countAtLeast`
+- `containsValue`
 - `existsAny`
 - `existsAll`
 - `pickFirst`
@@ -152,3 +156,48 @@ Example:
 ```
 
 Операторы компилируются в `PreparedMappingsArtifact v2`. Runtime не парсит пути и не делает hidden compile. Результат transport-safe: `string` или `null`.
+
+## `countAtLeast`
+
+`countAtLeast` выбирает элементы массива из `from`, опционально фильтрует их через `where` и возвращает `true`, если количество выбранных элементов больше или равно целочисленному `value`.
+
+```json
+{
+  "hasMultipleClients": {
+    "countAtLeast": {
+      "from": "sources.findClient.clients[*]",
+      "value": 2
+    }
+  }
+}
+```
+
+Ограничения:
+
+- `from` использует существующую форму array selector, где `[*]` стоит последним сегментом;
+- `value` — только целочисленный literal `>= 0`;
+- `where` поддерживает те же ограниченные comparators, что и другие array DSL операторы: `equals`, `in`, `startsWith`;
+- dynamic threshold expressions, nested wildcards, custom code и expression pipelines не поддерживаются.
+
+## `containsValue`
+
+`containsValue` выбирает элементы массива из `from`, опционально фильтрует их через `where` и возвращает `true`, если хотя бы один выбранный элемент строго равен JSON-safe scalar `value`.
+
+```json
+{
+  "emptyFieldsContainsEmail": {
+    "containsValue": {
+      "from": "sources.absClient.emptyFields[*]",
+      "value": "email"
+    }
+  }
+}
+```
+
+Ограничения:
+
+- элементы массива должны быть scalar JSON-safe значениями; object/array membership намеренно вне scope;
+- `value` — JSON-safe scalar literal;
+- сравнение выполняется строгим равенством; regex, contains-by-field, transforms и partial match не поддерживаются.
+
+Оба оператора компилируются в execution plan `PreparedMappingsArtifact v2` и предназначены для компактного, ревьюируемого построения facts.

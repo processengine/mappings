@@ -10,7 +10,7 @@ const SUPPORTED_OPERATORS = new Set([
   'from', 'literal', 'exists', 'equals', 'coalesce',
   'trim', 'lowercase', 'uppercase', 'normalizeSpaces', 'removeNonDigits',
   'mapValue', 'transform',
-  'collect', 'collectObject', 'count', 'existsAny', 'existsAll', 'pickFirst',
+  'collect', 'collectObject', 'count', 'countAtLeast', 'existsAny', 'existsAll', 'pickFirst', 'containsValue',
   'joinNonEmpty', 'template',
 ]);
 
@@ -381,6 +381,14 @@ function validateAggregateOperator(op, args, targetPath, declaredSources) {
   } else if (op === 'collectObject') {
     diagnostics.push(...validateCollectObjectFields(args.fields, targetPath, targetPath));
     if (args.match) diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator 'collectObject' does not support "match" in first version for "${targetPath}"`, loc));
+  } else if (op === 'countAtLeast') {
+    if (!Number.isInteger(args.value) || args.value < 0) {
+      diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator 'countAtLeast' requires integer "value" >= 0 in "${targetPath}"`, loc));
+    }
+  } else if (op === 'containsValue') {
+    if (!isJsonSafeLiteral(args.value)) {
+      diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator 'containsValue' requires JSON-safe scalar "value" in "${targetPath}"`, loc));
+    }
   } else if ('value' in args) {
     diagnostics.push(makeDiagnostic('INVALID_ARGS', `Operator '${op}' does not support "value" in "${targetPath}"`, loc));
   }
@@ -392,10 +400,10 @@ function validateAggregateOperator(op, args, targetPath, declaredSources) {
   }
 
   const allowed = new Set(['from', 'where']);
-  if (op === 'collect') allowed.add('value');
+  if (op === 'collect' || op === 'countAtLeast' || op === 'containsValue') allowed.add('value');
   if (op === 'collectObject') allowed.add('fields');
   if (op === 'existsAll') allowed.add('match');
-  if (op === 'existsAny' || op === 'count' || op === 'pickFirst') {
+  if (op === 'existsAny' || op === 'count' || op === 'countAtLeast' || op === 'containsValue' || op === 'pickFirst') {
     // where only in first version
   }
   for (const key of Object.keys(args)) {
@@ -410,7 +418,7 @@ function validateAggregateOperator(op, args, targetPath, declaredSources) {
 function validateOperatorArgs(op, args, targetPath, declaredSources) {
   const loc = { operator: op, targetPath };
 
-  if (['collect', 'collectObject', 'count', 'existsAny', 'existsAll', 'pickFirst'].includes(op)) {
+  if (['collect', 'collectObject', 'count', 'countAtLeast', 'existsAny', 'existsAll', 'pickFirst', 'containsValue'].includes(op)) {
     return validateAggregateOperator(op, args, targetPath, declaredSources);
   }
 

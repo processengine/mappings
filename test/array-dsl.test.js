@@ -161,3 +161,96 @@ test('validateMappings rejects invalid collectObject fields', () => {
   assert.equal(validation.ok, false);
   assert.ok(validation.diagnostics.some((item) => item.code === 'INVALID_TARGET_PATH'));
 });
+
+
+test('countAtLeast and containsValue build boolean facts', () => {
+  const prepared = prepareMappings({
+    mappingId: 'array.extra.v1',
+    sources: { findClient: 'object', abs: 'object' },
+    output: {
+      'facts.hasMultipleClients': {
+        countAtLeast: {
+          from: 'sources.findClient.clients[*]',
+          value: 2,
+        },
+      },
+      'facts.hasEmailEmptyField': {
+        containsValue: {
+          from: 'sources.abs.emptyFields[*]',
+          value: 'email',
+        },
+      },
+    },
+  });
+
+  const result = executeMappings(prepared, {
+    findClient: { clients: [{ id: 'C1' }, { id: 'C2' }] },
+    abs: { emptyFields: ['phone', 'email'] },
+  }, { trace: 'basic' });
+
+  assert.deepEqual(result.output, {
+    facts: {
+      hasMultipleClients: true,
+      hasEmailEmptyField: true,
+    },
+  });
+  assert.equal(result.trace.find((event) => event.target === 'facts.hasMultipleClients').details.threshold, 2);
+});
+
+test('countAtLeast and containsValue return false for non-matching or missing arrays', () => {
+  const prepared = prepareMappings({
+    mappingId: 'array.extra.false.v1',
+    sources: { findClient: 'object', abs: 'object' },
+    output: {
+      'facts.hasMultipleClients': {
+        countAtLeast: {
+          from: 'sources.findClient.clients[*]',
+          value: 2,
+        },
+      },
+      'facts.hasEmailEmptyField': {
+        containsValue: {
+          from: 'sources.abs.emptyFields[*]',
+          value: 'email',
+        },
+      },
+      'facts.hasMissingScalar': {
+        containsValue: {
+          from: 'sources.abs.missingFields[*]',
+          value: 'email',
+        },
+      },
+    },
+  });
+
+  const result = executeMappings(prepared, {
+    findClient: { clients: [{ id: 'C1' }] },
+    abs: { emptyFields: ['phone'] },
+  });
+
+  assert.deepEqual(result.output, {
+    facts: {
+      hasMultipleClients: false,
+      hasEmailEmptyField: false,
+      hasMissingScalar: false,
+    },
+  });
+});
+
+test('countAtLeast and containsValue validate arguments', () => {
+  const invalid = validateMappings({
+    mappingId: 'array.extra.invalid.v1',
+    sources: { abs: 'object' },
+    output: {
+      'facts.badCount': {
+        countAtLeast: { from: 'sources.abs.items[*]', value: -1 },
+      },
+      'facts.badContains': {
+        containsValue: { from: 'sources.abs.items[*]', value: { not: 'scalar' } },
+      },
+    },
+  });
+  assert.equal(invalid.ok, false);
+  assert.ok(invalid.diagnostics.some((item) => item.message.includes("countAtLeast")));
+  assert.ok(invalid.diagnostics.some((item) => item.message.includes("containsValue")));
+});

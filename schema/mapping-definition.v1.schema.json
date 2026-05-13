@@ -233,8 +233,15 @@
           "$ref": "#/definitions/ArrayCondition"
         },
         "value": {
-          "type": "string",
-          "minLength": 1
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "$ref": "#/definitions/JsonSafeLiteral"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -474,6 +481,59 @@
           "properties": {
             "count": {
               "$ref": "#/definitions/AggregateBase"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "countAtLeast"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "countAtLeast": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AggregateBase"
+                },
+                {
+                  "required": [
+                    "value"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "containsValue"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "containsValue": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/AggregateBase"
+                },
+                {
+                  "required": [
+                    "value"
+                  ],
+                  "properties": {
+                    "value": {
+                      "$ref": "#/definitions/JsonSafeLiteral"
+                    }
+                  }
+                }
+              ]
             }
           }
         },

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.0] — 2026-05-13
+
+### Added
+
+- Added compiled aggregate operator `countAtLeast` for boolean threshold checks over array selections.
+- Added compiled aggregate operator `containsValue` for strict scalar membership checks over array selections.
+
+### Architecture
+
+- Operators are part of the official `@processengine/mappings` DSL and must be used instead of processor-local wrappers.
+- Scope is intentionally limited to small array/facts helpers; no custom mapping operators, pipelines, fallback provenance operators, or general expression language were introduced.
+
+
 ## [Unreleased]
 
 ## [2.3.0] — 2026-05-08

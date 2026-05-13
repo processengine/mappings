@@ -311,6 +311,8 @@ function runAggregateRule(rule, sources) {
     traceBase.details.reason = reason;
     if (rule.op === 'collect') return { outputCreated: true, outputValue: [], traceEntry: { ...traceBase, resultType: 'array', resultLength: 0 } };
     if (rule.op === 'count') return { outputCreated: true, outputValue: 0, traceEntry: { ...traceBase, resultType: 'number', resultValue: 0 } };
+    if (rule.op === 'countAtLeast') return { outputCreated: true, outputValue: false, traceEntry: { ...traceBase, resultType: 'boolean', resultValue: false, details: { ...traceBase.details, threshold: rule.value } } };
+    if (rule.op === 'containsValue') return { outputCreated: true, outputValue: false, traceEntry: { ...traceBase, resultType: 'boolean', resultValue: false, details: { ...traceBase.details, value: rule.value } } };
     if (rule.op === 'existsAny') return { outputCreated: true, outputValue: false, traceEntry: { ...traceBase, resultType: 'boolean', resultValue: false } };
     if (rule.op === 'existsAll') return { outputCreated: true, outputValue: true, traceEntry: { ...traceBase, resultType: 'boolean', resultValue: true } };
     if (rule.op === 'pickFirst') return { outputCreated: true, outputValue: null, traceEntry: { ...traceBase, resultType: 'null', picked: false } };
@@ -364,6 +366,16 @@ function runAggregateRule(rule, sources) {
 
   if (rule.op === 'count') {
     return { outputCreated: true, outputValue: selectedCount, traceEntry: { ...traceBase, resultType: 'number', resultValue: selectedCount } };
+  }
+
+  if (rule.op === 'countAtLeast') {
+    const result = selectedCount >= rule.value;
+    return { outputCreated: true, outputValue: result, traceEntry: { ...traceBase, resultType: 'boolean', resultValue: result, details: { ...traceBase.details, threshold: rule.value } } };
+  }
+
+  if (rule.op === 'containsValue') {
+    const result = selectedItems.some((item) => item === rule.value);
+    return { outputCreated: true, outputValue: result, traceEntry: { ...traceBase, resultType: 'boolean', resultValue: result, details: { ...traceBase.details, value: rule.value } } };
   }
 
   if (rule.op === 'existsAny') {

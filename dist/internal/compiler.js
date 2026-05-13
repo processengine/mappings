@@ -261,7 +261,8 @@ function compileAggregateRule(targetPath, op, args) {
     selector: compileArraySelector(args.from),
     where: args.where ? compileConditionPredicate(args.where) : null,
     match: args.match ? compileConditionPredicate(args.match) : null,
-    valueAccessor: args.value ? compileRelativeAccessor(args.value) : null,
+    value: Object.prototype.hasOwnProperty.call(args, 'value') ? cloneJsonSafe(args.value) : undefined,
+    valueAccessor: args.value && typeof args.value === 'string' ? compileRelativeAccessor(args.value) : null,
     fieldAccessors: args.fields
       ? Object.fromEntries(Object.entries(args.fields).map(([key, path]) => [key, compileRelativeAccessor(path)]))
       : null,
@@ -273,7 +274,7 @@ export function compileDefinition(definition) {
   for (const [targetPath, rule] of Object.entries(definition.output)) {
     const op = Object.keys(rule)[0];
     const args = rule[op];
-    if (['collect', 'collectObject', 'count', 'existsAny', 'existsAll', 'pickFirst'].includes(op)) {
+    if (['collect', 'collectObject', 'count', 'countAtLeast', 'existsAny', 'existsAll', 'pickFirst', 'containsValue'].includes(op)) {
       rules.push(compileAggregateRule(targetPath, op, args));
     } else {
       rules.push(compileLegacyRule(targetPath, op, args));

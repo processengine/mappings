@@ -104,14 +104,16 @@ const result = executeMappings(artifact, {
 console.log(result.output);
 ```
 
-## Limited array DSL in 2.1.x
+## Limited array DSL
 
-`2.1.x` adds a limited array DSL for building compact facts from multiplicity without pushing interpretation back into service code.
+`2.1.x` added a limited array DSL for building compact facts from multiplicity without pushing interpretation back into service code. `2.4.0` adds two boolean helpers for common threshold and scalar membership checks.
 
 Supported aggregate operators:
 - `collect`
 - `collectObject`
 - `count`
+- `countAtLeast`
+- `containsValue`
 - `existsAny`
 - `existsAll`
 - `pickFirst`
@@ -317,3 +319,49 @@ Since `2.3.0`, mappings supports compiled string expressions for deterministic s
 ```
 
 The operators are compiled into `PreparedMappingsArtifact v2`. Runtime execution does not parse paths or perform hidden compile. Results are transport-safe: `string` or `null`.
+
+
+## `countAtLeast`
+
+`countAtLeast` selects array items from `from`, optionally filters them with `where`, and returns `true` when the selected count is greater than or equal to the integer `value`.
+
+```json
+{
+  "hasMultipleClients": {
+    "countAtLeast": {
+      "from": "sources.findClient.clients[*]",
+      "value": 2
+    }
+  }
+}
+```
+
+Restrictions:
+
+- `from` uses the existing array selector form with `[*]` as the last segment.
+- `value` must be an integer literal `>= 0`.
+- optional `where` supports the same limited comparators as other array DSL operators: `equals`, `in`, `startsWith`.
+- no dynamic threshold expressions, nested wildcards, custom code, or expression pipelines are supported.
+
+## `containsValue`
+
+`containsValue` selects array items from `from`, optionally filters them with `where`, and returns `true` when at least one selected item is strictly equal to the JSON-safe scalar `value`.
+
+```json
+{
+  "emptyFieldsContainsEmail": {
+    "containsValue": {
+      "from": "sources.absClient.emptyFields[*]",
+      "value": "email"
+    }
+  }
+}
+```
+
+Restrictions:
+
+- selected array items should be scalar JSON-safe values; object/array membership is intentionally out of scope.
+- `value` must be a JSON-safe scalar literal.
+- comparison is strict equality; no regex, contains-by-field, transforms, or partial match are supported.
+
+Both operators are compiled into the `PreparedMappingsArtifact v2` execution plan and are intended for compact, reviewable facts construction.

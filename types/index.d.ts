@@ -42,6 +42,8 @@ export interface ExecuteMappingsResult {
   trace?: MappingTraceEvent[];
 }
 
+export type AggregateOperatorName = 'collect' | 'collectObject' | 'count' | 'countAtLeast' | 'containsValue' | 'existsAny' | 'existsAll' | 'pickFirst';
+
 export interface MappingDefinition {
   mappingId: string;
   sources: Record<string, SourceTypeDeclaration>;

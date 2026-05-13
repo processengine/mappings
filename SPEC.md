@@ -477,3 +477,49 @@ The new operators return only `string` or `null`. They never return `undefined`,
 ### Address example
 
 The intended project use case is assembling a technical `fullAddress` for downstream ABS/CFT DTOs from a FIAS-structured address, without making `addressLine` mandatory in business rules.
+
+
+## `countAtLeast`
+
+`countAtLeast` selects array items from `from`, optionally filters them with `where`, and returns `true` when the selected count is greater than or equal to the integer `value`.
+
+```json
+{
+  "hasMultipleClients": {
+    "countAtLeast": {
+      "from": "sources.findClient.clients[*]",
+      "value": 2
+    }
+  }
+}
+```
+
+Restrictions:
+
+- `from` uses the existing array selector form with `[*]` as the last segment.
+- `value` must be an integer literal `>= 0`.
+- optional `where` supports the same limited comparators as other array DSL operators: `equals`, `in`, `startsWith`.
+- no dynamic threshold expressions, nested wildcards, custom code, or expression pipelines are supported.
+
+## `containsValue`
+
+`containsValue` selects array items from `from`, optionally filters them with `where`, and returns `true` when at least one selected item is strictly equal to the JSON-safe scalar `value`.
+
+```json
+{
+  "emptyFieldsContainsEmail": {
+    "containsValue": {
+      "from": "sources.absClient.emptyFields[*]",
+      "value": "email"
+    }
+  }
+}
+```
+
+Restrictions:
+
+- selected array items should be scalar JSON-safe values; object/array membership is intentionally out of scope.
+- `value` must be a JSON-safe scalar literal.
+- comparison is strict equality; no regex, contains-by-field, transforms, or partial match are supported.
+
+Both operators are compiled into the `PreparedMappingsArtifact v2` execution plan and are intended for compact, reviewable facts construction.
