@@ -1,0 +1,13 @@
+{
+  "item": {
+    "id": "build_client_payload",
+    "type": "MAPPINGS",
+    "kind": "payload",
+    "artefactId": "mappings.example.client_payload",
+    "contract": {
+      "input": { "ref": "$.context.input.application" },
+      "output": { "ref": "$.context.data.payloads.client" }
+    }
+  },
+  "mapping": "../mappings/client_payload.json"
+}

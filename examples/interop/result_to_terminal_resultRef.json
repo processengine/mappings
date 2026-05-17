@@ -1,0 +1,16 @@
+{
+  "producer": {
+    "type": "MAPPINGS",
+    "kind": "result",
+    "artefactId": "mappings.example.reject_result",
+    "contract": {
+      "input": { "ref": "$.context.data.payloads.validationReject" },
+      "output": { "ref": "$.context.data.results.reject" }
+    }
+  },
+  "terminal": {
+    "type": "TERMINAL",
+    "subtype": "FAIL",
+    "resultRef": "$.context.data.results.reject"
+  }
+}

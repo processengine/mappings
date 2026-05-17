@@ -1,6 +1,5 @@
-import { validateMappingsSource } from '../diagnostics/validate.js';
+import { validateMappingsSourceV3 } from '../v3/validate.js';
 
-export function validateMappings(source, options = {}) {
-  void options;
-  return validateMappingsSource(source);
+export function validateMappings(source) {
+  return validateMappingsSourceV3(source);
 }

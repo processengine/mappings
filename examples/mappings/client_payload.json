@@ -1,0 +1,18 @@
+{
+  "mappingId": "mappings.example.client_payload",
+  "kind": "payload",
+  "title": "Build client payload",
+  "description": "Normalizes client fields into the payload shape used by a downstream adapter.",
+  "output": {
+    "client.id": { "from": "$.client.id" },
+    "client.inn": { "removeNonDigits": "$.client.inn" },
+    "client.fullName": {
+      "join": {
+        "separator": " ",
+        "items": ["$.client.lastName", "$.client.firstName", "$.client.middleName"]
+      }
+    },
+    "client.email": { "text": { "from": "$.contacts.email", "trim": true, "case": "lower" } },
+    "client.phone": { "removeNonDigits": "$.contacts.phone" }
+  }
+}

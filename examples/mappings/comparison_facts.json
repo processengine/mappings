@@ -1,0 +1,27 @@
+{
+  "mappingId": "mappings.example.comparison_facts",
+  "kind": "facts",
+  "title": "Build comparison facts",
+  "description": "Counts critical and non-critical mismatches and collects critical mismatch codes.",
+  "output": {
+    "criticalMismatchCount": {
+      "count": {
+        "from": "$.mismatches[*]",
+        "where": { "field": "severity", "equals": "CRITICAL" }
+      }
+    },
+    "nonCriticalMismatchCount": {
+      "count": {
+        "from": "$.mismatches[*]",
+        "where": { "field": "severity", "equals": "NON_CRITICAL" }
+      }
+    },
+    "criticalMismatchCodes": {
+      "collect": {
+        "from": "$.mismatches[*]",
+        "where": { "field": "severity", "equals": "CRITICAL" },
+        "select": "$.code"
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "mappingId": "mappings.example.reject_result",
+  "kind": "result",
+  "title": "Build rejection result",
+  "description": "Builds a terminal result object for a rejected process outcome.",
+  "output": {
+    "status": { "const": "FAIL" },
+    "outcome": { "const": "VALIDATION_REJECTED" },
+    "reasonCode": { "const": "BENEFICIARY_VALIDATION_ERROR" },
+    "errors": {
+      "collect": {
+        "from": "$.issues[*]",
+        "where": { "field": "level", "equals": "ERROR" },
+        "select": { "code": "$.code", "message": "$.message", "field": "$.field" }
+      }
+    }
+  }
+}

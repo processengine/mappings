@@ -1,7 +1,7 @@
 {
   "name": "@processengine/mappings",
-  "version": "2.4.0",
-  "description": "Declarative JSON mappings runtime for ProcessEngine",
+  "version": "3.0.0",
+  "description": "Declarative data transformation library for ProcessEngine Flow 5.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,7 +10,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./schema/mapping-definition.v1.schema.json": "./schema/mapping-definition.v1.schema.json",
+    "./schema/mapping-definition.v3.schema.json": "./schema/mapping-definition.v3.schema.json",
     "./package.json": "./package.json"
   },
   "bin": {
@@ -20,6 +20,8 @@
     "dist/",
     "schema/",
     "bin/",
+    "docs/",
+    "examples/",
     "README.md",
     "README.ru.md",
     "SPEC.md",
@@ -27,22 +29,17 @@
     "COMPATIBILITY.md",
     "MIGRATION.md",
     "CHANGELOG.md",
-    "RELEASE_NOTES_2.0.0.md",
-    "RELEASE_NOTES_2.0.1.md",
-    "RELEASE_NOTES_2.1.0.md",
-    "RELEASE_NOTES_2.2.0.md",
-    "RELEASE_NOTES_2.3.0.md",
-    "RELEASE_NOTES_2.4.0.md",
+    "SECURITY.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node ./scripts/build.mjs",
     "pretest": "npm run build",
     "test": "node --test test/*.test.js",
-    "test:pack": "node ./scripts/pack-install-test.mjs",
+    "test:pack": "node scripts/pack-install-test.mjs",
     "bench": "node benchmarks/run.mjs",
-    "release:check": "npm test && npm run test:pack",
-    "prepublishOnly": "echo 'Publish only via GitHub Actions. See release workflow.' && exit 1",
+    "release:check": "npm test && npm run test:pack && npm pack --dry-run",
+    "prepublishOnly": "echo 'Publish only via GitHub Actions.' && exit 1",
     "version": "git add CHANGELOG.md package-lock.json package.json"
   },
   "engines": {

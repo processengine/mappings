@@ -1,0 +1,14 @@
+{
+  "mappingId": "mappings.invalid.collect_select",
+  "kind": "facts",
+  "title": "Invalid collect select",
+  "description": "Invalid in v3 because collect.select must be an explicit $. PathRef.",
+  "output": {
+    "codes": {
+      "collect": {
+        "from": "$.items[*]",
+        "select": "code"
+      }
+    }
+  }
+}

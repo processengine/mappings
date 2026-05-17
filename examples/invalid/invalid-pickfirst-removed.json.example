@@ -1,0 +1,13 @@
+{
+  "mappingId": "mappings.invalid.pickfirst_removed",
+  "kind": "payload",
+  "title": "Invalid pickFirst example",
+  "description": "Invalid in v3 because pickFirst was removed. Use a decision invariant and findOne.",
+  "output": {
+    "client": {
+      "pickFirst": {
+        "from": "$.clients[*]"
+      }
+    }
+  }
+}

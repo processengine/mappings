@@ -1,322 +1,183 @@
-# SPEC_RU: @processengine/mappings
+# SPEC: @processengine/mappings v3
 
-## Что нормативно определяется этим документом
+Status: implementation specification. Target: Flow 5 / `@processengine/dataflows` v1.
 
-Документ нормативно фиксирует:
-- роль библиотеки в семейства ProcessEngine;
-- lifecycle `validate -> prepare -> execute`;
-- shape source artifact;
-- semantics built-in operators;
-- prepared artifact contract;
-- runtime result contract;
-- diagnostics / runtime errors / trace;
-- ограничения первой версии array DSL.
+## Normative scope
 
-## 1. Роль библиотеки
+This document defines the v3 source artifact, prepared artifact, public API, runtime semantics, runtime result, operators, diagnostics, trace, migration, interop, and release readiness requirements.
 
-`@processengine/mappings` — слой нормализации и построения facts.
-Он не должен превращаться в язык программирования, оркестратор или decision-runtime.
+## Role
 
-## 2. Lifecycle
-
-- `validateMappings(...)` — мягкая валидация без исключения на обычных DSL-проблемах
-- `prepareMappings(...)` — compile-first подготовка, на blocking failure бросает `MappingsCompileError`
-- `executeMappings(...)` — runtime только для prepared artifact, без hidden compile
-
-## 3. Source artifact
-
-Минимальный shape:
-
-```json
-{
-  "mappingId": "profile.normalize.v1",
-  "sources": {
-    "raw": "object"
-  },
-  "output": {
-    "profile.name": { "normalizeSpaces": "sources.raw.fullName" }
-  }
-}
-```
-
-## 4. Path semantics
-
-Обычные source paths:
-- начинаются с `sources.`
-- не используют numeric indexes
-- не используют wildcard
-
-Для aggregate `from` разрешён только один `[*]`, только как последний сегмент.
-
-## 5. Built-in operators
-
-Scalar/object operators:
-- `from`
-- `literal`
-- `exists`
-- `equals`
-- `coalesce`
-- `trim`
-- `lowercase`
-- `uppercase`
-- `normalizeSpaces`
-- `removeNonDigits`
-- `mapValue`
-- `transform`
-
-## 6. Ограниченный array DSL в 2.1.x
-
-Поддерживаются:
-- `collect`
-- `collectObject`
-- `count`
-- `existsAny`
-- `existsAll`
-- `pickFirst`
-
-Поддерживаемые comparators:
-- `equals`
-- `in`
-- `startsWith`
-
-### Семантика special cases
-
-- `collect([]) -> []`
-- `count([]) -> 0`
-- `existsAny([]) -> false`
-- `existsAll([]) -> true`
-- `pickFirst([]) -> null`
-
-`collect` с неразрешённым `value` пропускает элемент и отражает это в trace через `droppedCount`.
-
-## 7. Prepared artifact
-
-Публично гарантируется минимум:
-- `type === 'mapping'`
-- `mappingId`
-- `version`
-- пригодность для `executeMappings(...)`
-- иммутабельность с точки зрения потребителя
-
-Версии:
-- `v1` — legacy compatibility path
-- `v2` — compiled execution plan
-
-## 8. Runtime result contract
-
-Успешный runtime-result:
-
-```js
-{
-  output: Record<string, unknown>,
-  trace?: MappingTraceEvent[]
-}
-```
-
-Результат transport-safe / JSON-safe по нормативному shape.
-
-## 9. Diagnostics и runtime errors
-
-Representative diagnostics:
-- `INVALID_MAPPING_ID`
-- `INVALID_SOURCE_DECLARATION`
-- `INVALID_MAPPING_SCHEMA`
-- `UNKNOWN_OPERATOR`
-- `INVALID_ARGS`
-- `CONFLICTING_TARGET_PATHS`
-- `INVALID_WILDCARD_USAGE`
-- `INVALID_CONDITION_SHAPE`
-- `MISSING_VALUE_IN_COLLECT`
-- `EMPTY_IN_ARRAY`
-
-Runtime failures идут через `MappingsRuntimeError`.
-
-## 10. Trace
-
-Уровни trace:
-- `false`
-- `'basic'`
-- `'verbose'`
-
-Для aggregate operators `basic` trace остаётся компактным и содержит только summary-поля, без сериализации всего массива.
-
-## 11. Ограничения первой версии
-
-В `2.1.x` не входят:
-- numeric indexes;
-- wildcard вне aggregate `from`;
-- nested wildcard;
-- `groupBy`, `mapEach`, `flatMap`, общий `reduce`;
-- arbitrary expression DSL;
-- nested aggregate operators.
-
-
-## `collectObject`
-
-`collectObject` selects array items from `from`, optionally filters them with `where`, and projects each selected item into a compact object using relative paths from `fields`. Unresolved fields are skipped. If all fields are unresolved for one selected item, that item is dropped from the output array.
-
-Example:
-
-```json
-{
-  "merchantErrors": {
-    "collectObject": {
-      "from": "sources.rules.issues[*]",
-      "where": { "field": "level", "equals": "ERROR" },
-      "fields": {
-        "code": "code",
-        "message": "message",
-        "field": "field"
-      }
-    }
-  }
-}
-```
-
----
-
-## Строковый DSL (`joinNonEmpty` и `template`) — v2
-
-В версии `2.3.0` добавлены два compiled string expression оператора для детерминированной JSON-safe сборки строк.
-
-### `joinNonEmpty`
-
-`joinNonEmpty` склеивает непустые scalar-значения через разделитель. Оператор пропускает `null`, отсутствующие пути, пустые строки и строки из пробелов. Числа и boolean приводятся к строке. Объекты и массивы запрещены как non-scalar значения.
-
-```json
-{
-  "joinNonEmpty": {
-    "separator": ", ",
-    "items": [
-      { "from": "sources.address.postalCode" },
-      { "from": "sources.address.regionName" },
-      {
-        "template": "г {{city}}",
-        "vars": {
-          "city": { "from": "sources.address.city" }
-        }
-      }
-    ]
-  }
-}
-```
-
-Значения по умолчанию:
+`@processengine/mappings` v3 is a declarative transformation library:
 
 ```text
-separator = ""
-trimItems = true
-trimResult = true
-emptyAsNull = true
+prepared mapping + input object -> JSON-safe output object
 ```
 
-Если все элементы пустые, оператор возвращает `null`.
+It does not read or write `ProcessState`, does not route processes, does not execute rules/decisions, and does not compose pipelines.
 
-### `template`
+## Public API
 
-`template` формирует строку по шаблону с именованными переменными. Переменные задаются mapping expressions.
+```ts
+validateMappings(source) -> ValidationResult
+prepareMappings(source) -> PreparedMappingsArtifact
+executeMappings(artifact, inputObject, options?) -> ExecuteMappingsResult
+formatMappingsDiagnostics(diagnostics) -> string
+formatMappingsRuntimeError(error) -> string
+```
 
-У `template` есть два синтаксических контекста:
+`validateMappings` does not throw on ordinary source problems. `prepareMappings` throws `MappingsCompileError`. `executeMappings` throws `MappingsRuntimeError`.
 
-- внутри списков выражений, например `joinNonEmpty.items`, используется inline-форма expression;
-- в корне output rule выражение нужно обернуть в ключ оператора.
+## Source artifact
 
-Inline-форма expression:
-
-```json
-{
-  "template": "д {{house}}",
-  "vars": {
-    "house": { "from": "sources.address.house" }
-  }
+```ts
+interface MappingDefinitionV3 {
+  mappingId: string;
+  kind: 'payload' | 'facts' | 'result';
+  title: string;
+  description: string;
+  output: Record<TargetPath, MappingExpression>;
+  metadata?: Record<string, JsonValue>;
 }
 ```
 
-Форма для output rule:
+Required fields: `mappingId`, `kind`, `title`, `description`, `output`. `output` must be non-empty.
 
-```json
-{
-  "output": {
-    "houseLabel": {
-      "template": {
-        "template": "д {{house}}",
-        "vars": {
-          "house": { "from": "sources.address.house" }
-        }
-      }
-    }
-  }
+Forbidden fields: `sources`, `version`, `compiledPlan`.
+
+## Prepared artifact
+
+```ts
+interface PreparedMappingsArtifact {
+  readonly artifactType: 'mappings';
+  readonly version: 'v3';
+  readonly mappingId: string;
+  readonly kind: 'payload' | 'facts' | 'result';
+  readonly title: string;
+  readonly description: string;
+  readonly compiledPlan: CompiledMappingsPlan;
+  getDefinition(): MappingDefinitionV3;
 }
 ```
 
-Значения по умолчанию:
+`compiledPlan` is public as a presence guarantee and internal by structure. Consumers must not construct or depend on its internal shape. Prepared artifacts are deep-copied from source and deeply immutable by public contract; mutating the original source object or a value returned by `getDefinition()` must not affect runtime behavior.
+
+## Runtime input and result
+
+`executeMappings` accepts one JSON-safe input object. All paths are rooted at `$`.
+
+```ts
+interface ExecuteMappingsResult {
+  output: JsonObject;
+  trace?: MappingTraceEvent[];
+}
+```
+
+The runtime result must be JSON-safe / transport-safe. `undefined`, functions, Date, Map, Set, BigInt, and cycles are forbidden in public output and trace.
+
+## Operators
+
+Supported: `from`, `const`, `coalesce`, `text`, `removeNonDigits`, `dictionary`, `equals`, `exists`, `count`, `existsAny`, `containsValue`, `collect`, `join`, `findOne`. For `collect.select`, every string selector must be an explicit v3 `PathRef` starting with `$.`; legacy-looking or implicit selectors such as `code`, empty string, or `sources.x` are invalid.
+
+Forbidden legacy operators: `literal`, `mapValue`, `transform`, `trim`, `normalizeSpaces`, `uppercase`, `lowercase`, `template`, `joinNonEmpty`, `collectObject`, `countAtLeast`, `existsAll`, `pickFirst`.
+
+
+## Boundary cases
+
+- `prepareMappings(...)` deep-copies source and returns a deeply immutable prepared artifact. Source mutation after prepare, direct `compiledPlan` mutation attempts, or mutation of `getDefinition()` output must not change runtime behavior.
+- `collect.select` string values and projection values must be explicit `$.` PathRefs. Implicit element paths and `sources.*` paths are rejected.
+- `text` and `removeNonDigits` return an empty string for absent or `null` input. This is intentional string-normalization behavior in v3.
+- `join` string items beginning with `$.` are input paths; other string items are literals. This is the only compact literal/path shorthand retained by v3.
+
+## Exists semantics
+
+A path with value `null`, `false`, `0`, empty string, or empty array exists. Only an absent path does not exist.
+
+## Interop
+
+`@processengine/dataflows` calls `executeMappings` and writes `result.output` to `$.context.data.*`. Mappings output can be passed directly to decisions as facts without host-side cleanup.
+
+## Definition of Done
+
+Implementation is ready only if tests, pack/install smoke, ESM import smoke, examples in tarball, CLI smoke, CI workflows, README/SPEC/COMPATIBILITY/MIGRATION/CHANGELOG, and typings are synchronized.
+
+## Design rules
+
+- One mapping artifact performs one transformation from one input object to one output object.
+- Composition belongs to `@processengine/dataflows`, not to mappings.
+- Decisions belong to `@processengine/decisions`, not to mappings.
+- Mappings v3 has no hidden pipeline, no hidden selection, and no legacy compatibility mode.
+- `mappingId` is the artifact identifier for mappings. It is equivalent in role to `id` in Flow/dataflow artifacts, but the historical name is retained for this package.
+
+## Runtime boundary guarantees
+
+The public runtime boundary is closed:
 
 ```text
-skipIfAnyVarEmpty = true
-trimResult = true
-emptyAsNull = true
+No user input, malformed prepared artifact, trace mode, runtime option, redactor, or malformed source-derived expression may produce a raw JavaScript exception from executeMappings(...).
 ```
 
-При `skipIfAnyVarEmpty = true` любая пустая переменная делает результат всего шаблона равным `null`. Это не даёт получить значения вроде `"кв"`, если квартира не передана.
+All public runtime failures must be surfaced as typed `MappingsRuntimeError` with stable machine-readable codes.
 
-### Композиция
+## Security constraints
 
-`template` можно использовать внутри `joinNonEmpty.items`. `joinNonEmpty` можно использовать внутри `coalesce`. Если `joinNonEmpty` вернул `null`, `coalesce` продолжает проверять следующий кандидат.
+Target paths and projection keys must not contain these object key segments:
 
-### Compile-first требование
-
-`joinNonEmpty` и `template` компилируются в execution plan `PreparedMappingsArtifact v2` на этапе `prepareMappings(...)`. Runtime не должен парсить path-строки, выполнять `split('.')` в hot path или делать hidden compile при первом вызове.
-
-### Transport-safe output
-
-Новые операторы возвращают только `string` или `null`. Они не возвращают `undefined`, функции, class instances, `Symbol`, `BigInt`, `Date`, массивы, объекты или циклические значения.
-
-### Пример с адресом
-
-Основной прикладной кейс — сборка технического `fullAddress` для DTO АБС/ЦФТ из ФИАС-раскладки адреса без превращения `addressLine` в обязательное business-rules поле.
-
-
-## `countAtLeast`
-
-`countAtLeast` выбирает элементы массива из `from`, опционально фильтрует их через `where` и возвращает `true`, если количество выбранных элементов больше или равно целочисленному `value`.
-
-```json
-{
-  "hasMultipleClients": {
-    "countAtLeast": {
-      "from": "sources.findClient.clients[*]",
-      "value": 2
-    }
-  }
-}
+```text
+__proto__
+prototype
+constructor
 ```
 
-Ограничения:
+This is enforced by validation and by runtime prepared-artifact validation. Runtime must not rely only on prior validation.
 
-- `from` использует существующую форму array selector, где `[*]` стоит последним сегментом.
-- `value` — только целочисленный literal `>= 0`.
-- `where` поддерживает те же ограниченные comparators, что и другие array DSL операторы: `equals`, `in`, `startsWith`.
-- dynamic threshold expressions, nested wildcards, custom code и expression pipelines не поддерживаются.
+## Trace and redaction semantics
 
-## `containsValue`
+`trace` is off by default. Supported runtime values are:
 
-`containsValue` выбирает элементы массива из `from`, опционально фильтрует их через `where` и возвращает `true`, если хотя бы один выбранный элемент строго равен JSON-safe scalar `value`.
-
-```json
-{
-  "emptyFieldsContainsEmail": {
-    "containsValue": {
-      "from": "sources.absClient.emptyFields[*]",
-      "value": "email"
-    }
-  }
-}
+```ts
+trace?: 'off' | 'basic' | 'verbose'
 ```
 
-Ограничения:
+`verbose` trace may include redacted input/output values. Redaction is not a cleanup mechanism: redactor output must already be JSON-safe. Non-JSON-safe redactor output is a runtime error.
 
-- элементы массива должны быть scalar JSON-safe значениями; object/array membership намеренно вне scope.
-- `value` — JSON-safe scalar literal.
-- сравнение выполняется строгим равенством; regex, contains-by-field, transforms и partial match не поддерживаются.
+## Operator semantics matrix
 
-Оба оператора компилируются в execution plan `PreparedMappingsArtifact v2` и предназначены для компактного, ревьюируемого построения facts.
+| Operator | Missing input path | `null` input | Object/array input | Output |
+|---|---|---|---|---|
+| `from` | field omitted | copied as `null` | copied if JSON-safe | copied value |
+| `const` | n/a | allowed | allowed if JSON-safe | constant value |
+| `coalesce` | skipped | skipped | first non-empty value copied | value or `null` |
+| `text` | `""` | `""` | stringified | string |
+| `removeNonDigits` | `""` | `""` | stringified | string |
+| `dictionary` | default or omitted | lookup by `"null"` if present | lookup by `String(value)` | mapped/default value |
+| `equals` | `false` | scalar compare | forbidden as expected value | boolean |
+| `exists` | `false` | `true` | `true` if path exists | boolean |
+| `count` | `0` | n/a | requires array at wildcard source | number |
+| `existsAny` | `false` | n/a | requires array at wildcard source | boolean |
+| `containsValue` | `false` | scalar compare | expected value must be scalar | boolean |
+| `collect` | `[]` | n/a | requires array at wildcard source | array |
+| `join` | skips missing items | skips null items | stringifies non-empty item values | string |
+| `findOne` | `MAPPINGS_FIND_ONE_NOT_FOUND` | n/a | requires exactly one matched item | JSON value |
+
+Notes:
+
+- `text` and `removeNonDigits` intentionally return an empty string for absent or `null` input. This is the chosen v3 string-normalization behavior.
+- `join` string items beginning with `$.` are paths; other string items are literals. This is the only literal/path shorthand retained by v3.
+- `collect.select` string values and projection values must be explicit `$.` PathRefs.
+
+## Negative examples
+
+The `examples/invalid/*.json.example` files document common invalid v2 and unsafe patterns. They intentionally do not use `.json` extension so that `validate-dir examples` remains a happy-path smoke command.
+
+## Flow 5 interop fixtures
+
+The `examples/interop/` directory contains contract-shaped fixtures for:
+
+```text
+mappings kind=payload -> dataflow input/output refs
+mappings kind=facts   -> decisions input
+mappings kind=result  -> TERMINAL.resultRef target
+```
+
+These fixtures are local examples. Full package-to-package interop tests belong in the Flow 5 workspace once `dataflows`, `decisions`, and `semantics` are wired together.

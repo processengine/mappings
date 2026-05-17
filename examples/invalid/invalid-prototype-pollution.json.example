@@ -1,0 +1,9 @@
+{
+  "mappingId": "mappings.invalid.prototype_pollution",
+  "kind": "payload",
+  "title": "Invalid prototype pollution example",
+  "description": "Invalid in v3 because target paths must not contain unsafe object key segments.",
+  "output": {
+    "__proto__.polluted": { "const": "yes" }
+  }
+}

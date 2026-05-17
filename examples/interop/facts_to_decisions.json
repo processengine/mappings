@@ -1,0 +1,19 @@
+{
+  "producer": {
+    "type": "MAPPINGS",
+    "kind": "facts",
+    "artefactId": "mappings.example.comparison_facts",
+    "contract": {
+      "input": { "ref": "$.context.data.payloads.clientComparison" },
+      "output": { "ref": "$.context.data.facts.clientComparison" }
+    }
+  },
+  "consumer": {
+    "type": "DECISIONS",
+    "artefactId": "decisions.example.client_resolution",
+    "contract": {
+      "input": { "ref": "$.context.data.facts.clientComparison" },
+      "output": { "ref": "$.context.data.decisions.clientResolution" }
+    }
+  }
+}

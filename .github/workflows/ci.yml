@@ -37,36 +37,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run unit and local CLI regression tests
-        run: npm test
-
-      - name: Run pack/install test
-        run: npm run test:pack
-
-      - name: Smoke test CLI — validate file
-        run: node bin/mappings.js validate-file examples/mappings/client/normalize_client_data.v1.json --json
-
-      - name: Smoke test CLI — compile
-        run: node bin/mappings.js compile examples/mappings/client/normalize_client_data.v1.json --json
-
-      - name: Smoke test CLI — run file with trace
-        run: node bin/mappings.js run-file examples/mappings/client/normalize_client_data.v1.json --sources examples/sources/client_raw.json --trace --json
-
-      - name: Smoke test CLI — validate directory
-        run: node bin/mappings.js validate-dir examples --json
-
-      - name: Smoke test CLI — list mappings
-        run: node bin/mappings.js list examples/mappings --json
-
-      - name: Verify package contents
-        run: npm pack --json > pack-output.json
-
-      - name: Upload packed artifact
-        if: matrix.node == 22
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-pack-node-${{ matrix.node }}
-          path: |
-            *.tgz
-            pack-output.json
-          if-no-files-found: error
+      - name: Run release checks
+        run: npm run release:check

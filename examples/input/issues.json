@@ -1,0 +1,6 @@
+{
+  "issues": [
+    { "level": "ERROR", "code": "BENEFICIARY.INN_REQUIRED", "message": "INN is required", "field": "beneficiary.inn" },
+    { "level": "WARNING", "code": "BENEFICIARY.PHONE_FORMAT", "message": "Phone format was normalized", "field": "beneficiary.contacts.phone" }
+  ]
+}

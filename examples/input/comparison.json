@@ -1,0 +1,7 @@
+{
+  "mismatches": [
+    { "severity": "CRITICAL", "code": "ABS.CLIENT.NAME_MISMATCH" },
+    { "severity": "NON_CRITICAL", "code": "ABS.CLIENT.EMAIL_MISMATCH" },
+    { "severity": "CRITICAL", "code": "ABS.CLIENT.ADDRESS_MISMATCH" }
+  ]
+}

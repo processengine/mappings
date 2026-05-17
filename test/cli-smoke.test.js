@@ -1,51 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
-const execFileAsync = promisify(execFile);
+const bin = resolve('bin/mappings.js');
+const mapping = resolve('examples/mappings/client_payload.json');
+const input = resolve('examples/input/client.json');
+const examples = resolve('examples');
+const mappingsDir = resolve('examples/mappings');
 
-async function runCli(args) {
-  return execFileAsync(process.execPath, ['bin/mappings.js', ...args], {
-    cwd: process.cwd(),
-    env: process.env,
-  });
+function run(args) {
+  return execFileSync(process.execPath, [bin, ...args], { encoding: 'utf8' });
 }
 
-test('CLI validate-file works', async () => {
-  const { stdout } = await runCli(['validate-file', 'examples/mappings/client/normalize_client_data.v1.json', '--json']);
-  const payload = JSON.parse(stdout);
-  assert.equal(payload.ok, true);
+test('CLI validate-file works', () => {
+  const out = JSON.parse(run(['validate-file', mapping, '--json']));
+  assert.equal(out.ok, true);
 });
 
-test('CLI compile works', async () => {
-  const { stdout } = await runCli(['compile', 'examples/mappings/client/normalize_client_data.v1.json', '--json']);
-  const payload = JSON.parse(stdout);
-  assert.equal(payload.artifactType, 'mapping');
+test('CLI compile works', () => {
+  const out = JSON.parse(run(['compile', mapping, '--json']));
+  assert.equal(out.artifactType, 'mappings');
+  assert.equal(out.version, 'v3');
 });
 
-test('CLI run-file works with trace', async () => {
-  const { stdout } = await runCli([
-    'run-file',
-    'examples/mappings/client/normalize_client_data.v1.json',
-    '--sources',
-    'examples/sources/client_raw.json',
-    '--trace',
-  ]);
-  const payload = JSON.parse(stdout);
-  assert.ok(payload.output);
-  assert.ok(Array.isArray(payload.trace));
+test('CLI run-file works with input and trace', () => {
+  const out = JSON.parse(run(['run-file', mapping, '--input', input, '--trace', 'verbose', '--json']));
+  assert.equal(out.output.client.inn, '123456');
+  assert.equal(out.output.client.phone, '79991234567');
+  assert.ok(Array.isArray(out.trace));
 });
 
-test('CLI validate-dir works', async () => {
-  const { stdout } = await runCli(['validate-dir', 'examples', '--json']);
-  const payload = JSON.parse(stdout);
-  assert.equal(payload.ok, true);
-  assert.ok(payload.results.length >= 1);
+test('CLI validate-dir works', () => {
+  const out = JSON.parse(run(['validate-dir', examples, '--json']));
+  assert.equal(out.ok, true);
+  assert.ok(out.results.length >= 3);
 });
 
-test('CLI list works', async () => {
-  const { stdout } = await runCli(['list', 'examples/mappings', '--json']);
-  const payload = JSON.parse(stdout);
-  assert.ok(payload.some((item) => item.mappingId === 'profile.normalize_input.v1'));
+test('CLI list works', () => {
+  const out = JSON.parse(run(['list', mappingsDir, '--json']));
+  assert.ok(out.some((item) => item.mappingId === 'mappings.example.client_payload'));
 });

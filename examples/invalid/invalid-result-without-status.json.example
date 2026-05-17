@@ -1,0 +1,9 @@
+{
+  "mappingId": "mappings.invalid.result_without_status",
+  "kind": "result",
+  "title": "Invalid result without status",
+  "description": "Invalid in v3 because result mappings must produce status.",
+  "output": {
+    "outcome": { "const": "REJECTED" }
+  }
+}

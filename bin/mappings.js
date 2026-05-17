@@ -20,28 +20,31 @@ Usage:
   mappings <mapping-file.json>
   mappings validate-file <mapping-file.json> [--json]
   mappings compile <mapping-file.json> [--json]
-  mappings run-file <mapping-file.json> --sources <sources.json> [--trace [basic|verbose]] [--json]
+  mappings run-file <mapping-file.json> --input <input.json> [--trace [off|basic|verbose]] [--json]
   mappings validate-dir <directory> [--json]
   mappings list <directory> [--json]
 `);
 }
 
 function parseOptions(args) {
-  const options = { json: false, trace: false, sourcesPath: null };
+  const options = { json: false, trace: 'off', inputPath: null };
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
     if (arg === '--json') {
       options.json = true;
       continue;
     }
-    if (arg === '--sources') {
-      options.sourcesPath = args[i + 1] ?? null;
+    if (arg === '--input') {
+      options.inputPath = args[i + 1] ?? null;
       i += 1;
       continue;
     }
     if (arg === '--trace') {
       const next = args[i + 1];
-      if (next === 'basic' || next === 'verbose') {
+      if (next === 'off' || next === 'basic' || next === 'verbose') {
+        options.trace = next;
+        i += 1;
+      } else if (next && !next.startsWith('--')) {
         options.trace = next;
         i += 1;
       } else {
@@ -50,8 +53,7 @@ function parseOptions(args) {
       continue;
     }
     if (arg.startsWith('--trace=')) {
-      const value = arg.slice('--trace='.length);
-      options.trace = value === 'verbose' ? 'verbose' : 'basic';
+      options.trace = arg.slice('--trace='.length);
     }
   }
   return options;
@@ -68,9 +70,9 @@ function isMappingSource(value) {
       typeof value === 'object' &&
       !Array.isArray(value) &&
       typeof value.mappingId === 'string' &&
-      value.sources &&
-      typeof value.sources === 'object' &&
-      !Array.isArray(value.sources) &&
+      typeof value.kind === 'string' &&
+      typeof value.title === 'string' &&
+      typeof value.description === 'string' &&
       value.output &&
       typeof value.output === 'object' &&
       !Array.isArray(value.output),
@@ -97,7 +99,7 @@ function printJson(value) {
 
 function toArtifactSummary(artifact) {
   return {
-    artifactType: artifact.type,
+    artifactType: artifact.artifactType,
     mappingId: artifact.mappingId,
     version: artifact.version,
   };
@@ -136,16 +138,16 @@ async function commandCompile(filePath, options) {
 }
 
 async function commandRunFile(filePath, options) {
-  if (!options.sourcesPath) {
-    console.error('Missing required option --sources <sources.json>');
+  if (!options.inputPath) {
+    console.error('Missing required option --input <input.json>');
     process.exit(1);
   }
   try {
     const source = await readJsonFile(filePath);
-    const sources = await readJsonFile(options.sourcesPath);
+    const input = await readJsonFile(options.inputPath);
     const artifact = prepareMappings(source);
-    const result = executeMappings(artifact, sources, { trace: options.trace });
-    if (options.json || options.trace) {
+    const result = executeMappings(artifact, input, { trace: options.trace });
+    if (options.json || options.trace !== 'off') {
       printJson(result);
     } else {
       printJson(result.output);
@@ -226,7 +228,7 @@ async function main() {
   }
 
   if (!COMMANDS.has(first)) {
-    return commandValidateFile(resolve(first), { json: false, trace: false, sourcesPath: null });
+    return commandValidateFile(resolve(first), { json: false, trace: 'off', inputPath: null });
   }
 
   const command = first;

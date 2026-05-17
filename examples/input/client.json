@@ -1,0 +1,13 @@
+{
+  "client": {
+    "id": "CL-001",
+    "inn": "  12-34-56  ",
+    "lastName": "Иванов",
+    "firstName": "Иван",
+    "middleName": "Иванович"
+  },
+  "contacts": {
+    "email": "  IVANOV@EXAMPLE.COM ",
+    "phone": "+7 (999) 123-45-67"
+  }
+}

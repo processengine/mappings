@@ -1,0 +1,10 @@
+{
+  "mappingId": "mappings.invalid.legacy_sources",
+  "kind": "payload",
+  "title": "Invalid legacy sources example",
+  "description": "Invalid in v3 because named sources and sources.* paths are removed.",
+  "sources": { "input": "object" },
+  "output": {
+    "name": { "from": "sources.input.name" }
+  }
+}
