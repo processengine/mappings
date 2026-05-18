@@ -1,6 +1,6 @@
 # @processengine/mappings v3
 
-Declarative JSON transformation library for ProcessEngine Flow 5.
+A safe declarative DSL for turning raw microservice JSON responses into normalized decision facts.
 
 `@processengine/mappings` v3 performs one job:
 
@@ -13,17 +13,21 @@ It does not know Flow graph state, `PROCESS/DATA`, `CONTROL/ROUTE`, effects, wai
 ## Canonical lifecycle
 
 ```js
-import { validateMappings, prepareMappings, executeMappings } from '@processengine/mappings';
+import {
+  validateMappings,
+  prepareMappings,
+  executeMappings,
+} from "@processengine/mappings";
 
 const source = {
-  mappingId: 'mappings.client.payload',
-  kind: 'payload',
-  title: 'Build client payload',
-  description: 'Normalizes client data for a downstream adapter.',
+  mappingId: "mappings.client.payload",
+  kind: "payload",
+  title: "Build client payload",
+  description: "Normalizes client data for a downstream adapter.",
   output: {
-    name: { text: { from: '$.client.name', trim: true } },
-    phone: { removeNonDigits: '$.contacts.phone' }
-  }
+    name: { text: { from: "$.client.name", trim: true } },
+    phone: { removeNonDigits: "$.contacts.phone" },
+  },
 };
 
 const validation = validateMappings(source);
@@ -31,8 +35,8 @@ if (!validation.ok) throw new Error(JSON.stringify(validation.diagnostics));
 
 const artifact = prepareMappings(source);
 const result = executeMappings(artifact, {
-  client: { name: '  Alice  ' },
-  contacts: { phone: '+1 (555) 000-0000' }
+  client: { name: "  Alice  " },
+  contacts: { phone: "+1 (555) 000-0000" },
 });
 
 console.log(result.output);
@@ -43,7 +47,7 @@ console.log(result.output);
 ```ts
 interface MappingDefinitionV3 {
   mappingId: string;
-  kind: 'payload' | 'facts' | 'result';
+  kind: "payload" | "facts" | "result";
   title: string;
   description: string;
   output: Record<TargetPath, MappingExpression>;
