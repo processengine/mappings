@@ -29,7 +29,7 @@ interface MappingDefinitionV3 {
 }
 ```
 
-`output` обязан быть непустым объектом. Поля `sources`, `version`, `compiledPlan` в source запрещены.
+`output` обязан быть непустым объектом. Каждое выражение output-поля может содержать опциональные метаданные `name` и `description` рядом с оператором; эти метаданные сохраняются в `getDefinition()` и не попадают в исполняемый `compiledPlan`. Поля `sources`, `version`, `compiledPlan` в source запрещены.
 
 ## Runtime result
 

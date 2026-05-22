@@ -1,6 +1,6 @@
 {
   "name": "@processengine/mappings",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "Declarative data transformation library for ProcessEngine Flow 5.",
   "type": "module",
   "main": "./dist/index.js",

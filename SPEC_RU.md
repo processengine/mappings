@@ -41,7 +41,7 @@ interface MappingDefinitionV3 {
 }
 ```
 
-Required fields: `mappingId`, `kind`, `title`, `description`, `output`. `output` must be non-empty.
+Required fields: `mappingId`, `kind`, `title`, `description`, `output`. `output` must be non-empty. Output field expressions may include optional `name` and `description` metadata next to the single operator; metadata is part of the source definition, not runtime execution.
 
 Forbidden fields: `sources`, `version`, `compiledPlan`.
 

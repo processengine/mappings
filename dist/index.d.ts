@@ -24,7 +24,12 @@ export interface ExecuteMappingsOptions {
   redact?: ((value: JsonValue) => JsonValue) | 'mask' | { redact(value: JsonValue): JsonValue };
 }
 
-export type MappingExpression =
+export interface MappingExpressionDocumentation {
+  name?: string;
+  description?: string;
+}
+
+export type MappingExpression = MappingExpressionDocumentation & (
   | { from: PathRef }
   | { const: JsonValue }
   | { coalesce: Array<PathRef | MappingExpression> }
@@ -38,7 +43,8 @@ export type MappingExpression =
   | { containsValue: { from: PathRef; value: JsonScalar } }
   | { collect: { from: PathRef; where?: MappingWhere; select?: PathRef | Record<string, PathRef> } }
   | { join: MappingJoinExpression }
-  | { findOne: { from: PathRef; where?: MappingWhere } };
+  | { findOne: { from: PathRef; where?: MappingWhere } }
+);
 
 export interface MappingWhere {
   field: string;

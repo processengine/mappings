@@ -55,7 +55,7 @@ interface MappingDefinitionV3 {
 }
 ```
 
-`output` must be a non-empty object. Source `version`, `sources`, and `compiledPlan` are forbidden.
+`output` must be a non-empty object. Each output field expression may include optional `name` and `description` metadata next to the operator; this metadata is preserved in `getDefinition()` and omitted from the executable `compiledPlan`. Source `version`, `sources`, and `compiledPlan` are forbidden.
 
 ## Prepared artifacts
 

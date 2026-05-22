@@ -48,6 +48,50 @@ test('validateMappings accepts canonical v3 payload/facts/result artifacts', () 
   assert.equal(validateMappings(resultSource).ok, true);
 });
 
+test('validateMappings accepts output field documentation on expressions', () => {
+  const source = {
+    ...factsSource,
+    output: {
+      resultStatus: {
+        name: 'Статус результата',
+        description: 'Бизнес-статус ответа внешней операции.',
+        from: '$.resultStatus',
+      },
+      selectedClientId: {
+        name: 'Выбранная карточка клиента',
+        description: 'Идентификатор карточки, выбранной после поиска.',
+        coalesce: ['$.selectedClient.id', { const: null }],
+      },
+    },
+  };
+
+  assert.equal(validateMappings(source).ok, true);
+
+  const artifact = prepareMappings(source);
+  assert.deepEqual(artifact.compiledPlan[0].expr, { from: '$.resultStatus' });
+  assert.deepEqual(artifact.compiledPlan[1].expr, { coalesce: ['$.selectedClient.id', { const: null }] });
+  assert.equal(artifact.getDefinition().output.resultStatus.name, 'Статус результата');
+
+  const result = executeMappings(artifact, {
+    resultStatus: 'SUCCESS',
+    selectedClient: { id: 'C-1' },
+  });
+  assert.deepEqual(result.output, {
+    resultStatus: 'SUCCESS',
+    selectedClientId: 'C-1',
+  });
+});
+
+test('validateMappings rejects invalid output field documentation', () => {
+  const invalidName = validateMappings({ ...payloadSource, output: { x: { name: '', description: 'Valid description.', from: '$.x' } } });
+  assert.equal(invalidName.ok, false);
+  assert.ok(invalidName.diagnostics.some((d) => d.code === 'MAPPINGS_EXPRESSION_METADATA_INVALID' && d.path === 'output.x.name'));
+
+  const invalidDescription = validateMappings({ ...payloadSource, output: { x: { name: 'Valid name', description: 123, from: '$.x' } } });
+  assert.equal(invalidDescription.ok, false);
+  assert.ok(invalidDescription.diagnostics.some((d) => d.code === 'MAPPINGS_EXPRESSION_METADATA_INVALID' && d.path === 'output.x.description'));
+});
+
 test('validateMappings rejects missing required fields and empty output', () => {
   assert.ok(validateMappings({ ...payloadSource, mappingId: '' }).diagnostics.some((d) => d.code === 'MAPPINGS_MAPPING_ID_MISSING'));
   assert.ok(validateMappings({ ...payloadSource, kind: undefined }).diagnostics.some((d) => d.code === 'MAPPINGS_KIND_MISSING'));

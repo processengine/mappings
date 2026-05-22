@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.0.1] — 2026-05-22
+
+### Added
+- Allow `name` and `description` metadata on v3 output field expressions so each produced artifact field can be documented inline.
+
+### Changed
+- Preserve output field metadata in `getDefinition()` while keeping `compiledPlan` operator-only for runtime execution.
+- Extend TypeScript definitions and documentation for inline output field metadata.
+
 ## [3.0.0] — 2026-05-17
 
 ### Changed

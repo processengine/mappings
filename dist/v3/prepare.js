@@ -1,9 +1,24 @@
 import { validateMappingsSourceV3 } from './validate.js';
-import { deepCopy, deepFreeze } from './path.js';
+import { deepCopy, deepFreeze, isPlainObject } from './path.js';
 import { MappingsCompileError } from '../errors/MappingsCompileError.js';
 
+const EXPRESSION_METADATA_FIELDS = new Set(['name', 'description']);
+
+function stripExpressionMetadata(expr) {
+  if (!isPlainObject(expr)) return deepCopy(expr);
+
+  const cleanExpr = {};
+  for (const [key, value] of Object.entries(expr)) {
+    if (EXPRESSION_METADATA_FIELDS.has(key)) continue;
+    cleanExpr[key] = key === 'coalesce' && Array.isArray(value)
+      ? value.map((item) => (isPlainObject(item) ? stripExpressionMetadata(item) : deepCopy(item)))
+      : deepCopy(value);
+  }
+  return cleanExpr;
+}
+
 function compilePlan(output) {
-  return Object.entries(output).map(([targetPath, expr]) => ({ targetPath, expr: deepCopy(expr) }));
+  return Object.entries(output).map(([targetPath, expr]) => ({ targetPath, expr: stripExpressionMetadata(expr) }));
 }
 
 export function prepareMappingsV3(source) {

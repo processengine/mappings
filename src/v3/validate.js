@@ -10,6 +10,7 @@ const ALLOWED_OPERATORS = new Set([
   'from', 'const', 'coalesce', 'text', 'removeNonDigits', 'dictionary', 'equals', 'exists',
   'count', 'existsAny', 'containsValue', 'collect', 'join', 'findOne',
 ]);
+const EXPRESSION_METADATA_FIELDS = new Set(['name', 'description']);
 const DECISION_LIKE_NAMES = /^(should|reject|approve|route|outcome)/i;
 const RESULT_LIKE_NAMES = /^(status|reasonCode|merchantMessage)$/;
 
@@ -153,8 +154,14 @@ export function validateExpression(expr, path, diagnostics) {
   }
 
   const keys = Object.keys(expr);
-  const operators = keys.filter((key) => ALLOWED_OPERATORS.has(key) || FORBIDDEN_V2_OPERATORS.has(key));
-  for (const key of keys) {
+  const operatorKeys = keys.filter((key) => !EXPRESSION_METADATA_FIELDS.has(key));
+  const operators = operatorKeys.filter((key) => ALLOWED_OPERATORS.has(key) || FORBIDDEN_V2_OPERATORS.has(key));
+  for (const key of EXPRESSION_METADATA_FIELDS) {
+    if (key in expr && (typeof expr[key] !== 'string' || !expr[key].trim())) {
+      diagnostics.push(diag('MAPPINGS_EXPRESSION_METADATA_INVALID', 'error', `expression ${key} must be a non-empty string`, `${path}.${key}`));
+    }
+  }
+  for (const key of operatorKeys) {
     if (FORBIDDEN_V2_OPERATORS.has(key)) diagnostics.push(diag('MAPPINGS_OPERATOR_UNSUPPORTED', 'error', `Operator "${key}" is not supported in mappings v3. See migration guide.`, `${path}.${key}`));
     else if (!ALLOWED_OPERATORS.has(key)) diagnostics.push(diag('MAPPINGS_OPERATOR_UNSUPPORTED', 'error', `Operator or field "${key}" is not supported in mappings v3`, `${path}.${key}`));
   }
